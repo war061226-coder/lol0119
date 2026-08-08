@@ -1,83 +1,30 @@
 [
   {
-    "id": 1,
+    "id": "1",
+    "createdAt": "2026-08-08T20:00:00.000Z",
     "balanceScore": 93,
+    "mmrDiff": 30,
+    "positionMatch": 80,
     "blueTeam": {
-      "avgTier": "SILVER I",
-      "avgMMR": 1250,
+      "avgMmr": 1250,
       "teamScore": 1327,
       "players": [
-        { "name": "BisCuit#Rest1", "tier": "IRON I", "lane": "TOP" },
-        { "name": "은빛날개z#KR1", "tier": "GOLD IV", "lane": "JG" },
-        { "name": "게임 안에서 게임하기#니하하하하", "tier": "EMERALD III", "lane": "MID" },
-        { "name": "해보자#해보드라고", "tier": "GOLD II", "lane": "ADC" },
-        { "name": "단결된 의지#1226", "tier": "BRONZE III", "lane": "SUP" }
+        { "name": "BisCuit#Rest1", "tier": "IRON I", "mmr": 1100, "position": "TOP" },
+        { "name": "은빛날개z#KR1", "tier": "GOLD IV", "mmr": 1300, "position": "JG" },
+        { "name": "게임 안에서 게임하기#니하하하하", "tier": "EMERALD III", "mmr": 1600, "position": "MID" },
+        { "name": "해보자#해보드라고", "tier": "GOLD II", "mmr": 1350, "position": "ADC" },
+        { "name": "단결된 의지#1226", "tier": "BRONZE III", "mmr": 900, "position": "SUP" }
       ]
     },
     "redTeam": {
-      "avgTier": "SILVER I",
-      "avgMMR": 1280,
+      "avgMmr": 1280,
       "teamScore": 1325,
       "players": [
-        { "name": "안녕안녕#안녕이야", "tier": "GOLD III", "lane": "TOP" },
-        { "name": "사라진세계의천악#KR1", "tier": "BRONZE I", "lane": "JG" },
-        { "name": "아스파라거스#aste", "tier": "SILVER II", "lane": "MID" },
-        { "name": "정정쓰#7777", "tier": "PLATINUM II", "lane": "ADC" },
-        { "name": "김토토#아가대장", "tier": "SILVER II", "lane": "SUP" }
-      ]
-    }
-  },
-  {
-    "id": 2,
-    "blueTeam": {
-      "avgTier": "SILVER I",
-      "avgMMR": 1220,
-      "teamScore": 1266,
-      "players": [
-        { "name": "단결된 의지#1226", "tier": "BRONZE III", "lane": "TOP" },
-        { "name": "사라진세계의천악#KR1", "tier": "BRONZE I", "lane": "JG" },
-        { "name": "아스파라거스#aste", "tier": "SILVER II", "lane": "MID" },
-        { "name": "게임 안에서 게임하기#니하하하하", "tier": "EMERALD III", "lane": "ADC" },
-        { "name": "Vega#BDD", "tier": "SILVER III", "lane": "SUP" }
-      ]
-    },
-    "redTeam": {
-      "avgTier": "SILVER I",
-      "avgMMR": 1220,
-      "teamScore": 1267,
-      "players": [
-        { "name": "BisCuit#Rest1", "tier": "IRON I", "lane": "TOP" },
-        { "name": "은빛날개z#KR1", "tier": "GOLD IV", "lane": "JG" },
-        { "name": "스페얼아님#1234", "tier": "SILVER II", "lane": "MID" },
-        { "name": "해보자#해보드라고", "tier": "GOLD II", "lane": "ADC" },
-        { "name": "안녕안녕#안녕이야", "tier": "GOLD III", "lane": "SUP" }
-      ]
-    }
-  },
-  {
-    "id": 3,
-    "blueTeam": {
-      "avgTier": "SILVER I",
-      "avgMMR": 1220,
-      "teamScore": 1295,
-      "players": [
-        { "name": "BisCuit#Rest1", "tier": "BRONZE I", "lane": "TOP" },
-        { "name": "스페얼아님#1234", "tier": "SILVER II", "lane": "JG" },
-        { "name": "게임 안에서 게임하기#니하하하하", "tier": "EMERALD III", "lane": "MID" },
-        { "name": "Vega#BDD", "tier": "SILVER III", "lane": "ADC" },
-        { "name": "단결된 의지#1226", "tier": "BRONZE III", "lane": "SUP" }
-      ]
-    },
-    "redTeam": {
-      "avgTier": "SILVER I",
-      "avgMMR": 1250,
-      "teamScore": 1304,
-      "players": [
-        { "name": "안녕안녕#안녕이야", "tier": "GOLD III", "lane": "TOP" },
-        { "name": "은빛날개z#KR1", "tier": "GOLD IV", "lane": "JG" },
-        { "name": "아스파라거스#aste", "tier": "SILVER II", "lane": "MID" },
-        { "name": "해보자#해보드라고", "tier": "GOLD II", "lane": "ADC" },
-        { "name": "사라진세계의천악#KR1", "tier": "BRONZE II", "lane": "SUP" }
+        { "name": "안녕안녕#안녕이야", "tier": "GOLD III", "mmr": 1380, "position": "TOP" },
+        { "name": "사라진세계의천악#KR1", "tier": "BRONZE I", "mmr": 1000, "position": "JG" },
+        { "name": "아스파라거스#aste", "tier": "SILVER II", "mmr": 1200, "position": "MID" },
+        { "name": "정정쓰#7777", "tier": "PLATINUM II", "mmr": 1500, "position": "ADC" },
+        { "name": "김토토#아가대장", "tier": "SILVER II", "mmr": 1200, "position": "SUP" }
       ]
     }
   }
