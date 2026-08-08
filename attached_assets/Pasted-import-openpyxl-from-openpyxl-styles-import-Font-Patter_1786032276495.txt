@@ -1,0 +1,96 @@
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+
+# 워크북 생성
+wb = openpyxl.Workbook()
+
+# 시트 1: 선수명단
+ws_players = wb.active
+ws_players.title = "선수명단"
+
+# 시트 2: 설정
+ws_config = wb.create_sheet(title="설정")
+
+# 1. '설정' 시트 데이터 구축
+ws_config.views.sheetView[0].showGridLines = True
+
+# 티어 기준표
+ws_config.cell(row=1, column=1, value="티어")
+ws_config.cell(row=1, column=2, value="기본 MMR")
+
+tier_data = [
+    ("아이언4", 0), ("아이언3", 0), ("아이언2", 0), ("아이언1", 0),
+    ("브론즈4", 0), ("브론즈3", 0), ("브론즈2", 0), ("브론즈1", 0),
+    ("실버4", 0), ("실버3", 0), ("실버2", 0), ("실버1", 0),
+    ("골드4", 1), ("골드3", 2), ("골드2", 3), ("골드1", 4),
+    ("플래티넘4", 5), ("플래티넘3", 6), ("플래티넘2", 7), ("플래티넘1", 8),
+    ("에메랄드4", 10), ("에메랄드3", 11), ("에메랄드2", 12), ("에메랄드1", 13),
+    ("다이아몬드4", 15), ("다이아몬드3", 17), ("다이아몬드2", 19), ("다이아몬드1", 21),
+    ("마스터", 25), ("그랜드마스터", 30), ("챌린저", 35)
+]
+
+for idx, (t, m) in enumerate(tier_data, start=2):
+    ws_config.cell(row=idx, column=1, value=t)
+    ws_config.cell(row=idx, column=2, value=m)
+
+# 포지션 조정 점수표
+ws_config.cell(row=1, column=4, value="구분")
+ws_config.cell(row=1, column=5, value="조정 점수")
+
+adj_data = [
+    ("주 포지션", 0),
+    ("부 포지션", -2),
+    ("타 라인(파괴)", -4)
+]
+
+for idx, (g, p) in enumerate(adj_data, start=2):
+    ws_config.cell(row=idx, column=4, value=g)
+    ws_config.cell(row=idx, column=5, value=p)
+
+# 2. '선수명단' 시트 수식 및 헤더 구성
+ws_players.views.sheetView[0].showGridLines = True
+
+headers = ["선수 이름", "티어", "주 포지션", "부 포지션", "출전 포지션", "감점 계산", "최종 MMR"]
+for c_idx, h_text in enumerate(headers, start=1):
+    ws_players.cell(row=1, column=c_idx, value=h_text)
+
+# 샘플 데이터 10명 + 수식 추가
+sample_players = [
+    ("선수1", "다이아몬드4", "TOP", "JG", "TOP"),
+    ("선수2", "에메랄드2", "JG", "MID", "JG"),
+    ("선수3", "골드1", "MID", "ADC", "MID"),
+    ("선수4", "플래티넘3", "ADC", "SUP", "ADC"),
+    ("선수5", "실버1", "SUP", "MID", "SUP"),
+    ("선수6", "다이아몬드2", "MID", "TOP", "MID"),
+    ("선수7", "에메랄드1", "TOP", "SUP", "JG"),
+    ("선수8", "플래티넘1", "ADC", "MID", "TOP"),
+    ("선수9", "골드2", "JG", "ADC", "ADC"),
+    ("선수10", "실버2", "SUP", "TOP", "SUP"),
+]
+
+for idx, p in enumerate(sample_players, start=2):
+    ws_players.cell(row=idx, column=1, value=p[0])
+    ws_players.cell(row=idx, column=2, value=p[1])
+    ws_players.cell(row=idx, column=3, value=p[2])
+    ws_players.cell(row=idx, column=4, value=p[3])
+    ws_players.cell(row=idx, column=5, value=p[4])
+    
+    # F열 감점 수식
+    ws_players.cell(row=idx, column=6, value=f'=IF(E{idx}="","", IF(E{idx}=C{idx}, 설정!$E$2, IF(E{idx}=D{idx}, 설정!$E$3, 설정!$E$4)))')
+    # G열 최종 MMR 수식
+    ws_players.cell(row=idx, column=7, value=f'=IF(B{idx}="","", MAX(0, XLOOKUP(B{idx}, 설정!$A$2:$A$32, 설정!$B$2:$B$32, 0) + F{idx}))')
+
+# 팀 MMR 합계 수식
+ws_players.cell(row=13, column=5, value="A팀 MMR 합계:")
+ws_players.cell(row=13, column=7, value="=SUM(G2:G6)")
+
+ws_players.cell(row=14, column=5, value="B팀 MMR 합계:")
+ws_players.cell(row=14, column=7, value="=SUM(G7:G11)")
+
+ws_players.cell(row=15, column=5, value="양 팀 차이:")
+ws_players.cell(row=15, column=7, value="=ABS(G13-G14)")
+
+# 엑셀 파일 저장
+wb.save("LoL_내전_팀배정_MMR계산기.xlsx")
+print("LoL_내전_팀배정_MMR계산기.xlsx 파일 생성이 완료되었습니다!")

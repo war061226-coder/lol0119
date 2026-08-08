@@ -1,0 +1,4 @@
+windows-release/LoL-커스텀-밸런서.exe filter=lfs diff=lfs merge=lfs -text
+windows-release/win-unpacked/LoL[[:space:]]커스텀[[:space:]]게임[[:space:]]밸런서.exe filter=lfs diff=lfs merge=lfs -text
+windows-release/win-unpacked/resources/app.asar filter=lfs diff=lfs merge=lfs -text
+windows-release/win-unpacked/LoL[[:space:]]커스텀[[:space:]]게임[[:space:]]밸런서.exe filter=lfs diff=lfs merge=lfs -text
