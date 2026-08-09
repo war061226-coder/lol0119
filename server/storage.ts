@@ -1,7 +1,16 @@
-import { type Player, type InsertPlayer, type Team, type InsertTeam, type BalanceResult, type InsertBalanceResult, type Preset, type InsertPreset, type BalanceSettings, type InsertBalanceSettings } from "@shared/schema";
+import {
+  players,
+  teams,
+  balanceResults,
+  presets,
+  balanceSettingsTable,
+  type Player, type InsertPlayer, type Team, type InsertTeam, type BalanceResult, type InsertBalanceResult, type Preset, type InsertPreset, type BalanceSettings, type InsertBalanceSettings,
+} from "@shared/schema";
 import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
+import { eq, desc } from "drizzle-orm";
+import { createDb, type Database } from "./db";
 
 export function getDataDir(): string {
   return process.env.LOL_BALANCER_DATA_DIR
@@ -377,4 +386,269 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+/**
+ * Neon 등 무료/유료 PostgreSQL DB에 데이터를 저장하는 구현체.
+ * DATABASE_URL 환경변수가 설정되어 있으면 이 클래스가 자동으로 사용됩니다.
+ */
+export class DatabaseStorage implements IStorage {
+  private db: Database;
+  private ready: Promise<void>;
+
+  constructor(db: Database) {
+    this.db = db;
+    this.ready = this.ensureDefaultBalanceSettings();
+  }
+
+  private async ensureDefaultBalanceSettings(): Promise<void> {
+    try {
+      const existing = await this.db
+        .select()
+        .from(balanceSettingsTable)
+        .where(eq(balanceSettingsTable.isDefault, true))
+        .limit(1);
+      if (existing.length === 0) {
+        await this.db.insert(balanceSettingsTable).values({
+          name: "기본 설정",
+          isDefault: true,
+        });
+      }
+    } catch (error) {
+      console.error("기본 밸런스 설정 초기화 실패:", error);
+    }
+  }
+
+  // ---- Players ----
+  async getPlayer(id: string): Promise<Player | undefined> {
+    const [player] = await this.db.select().from(players).where(eq(players.id, id)).limit(1);
+    return player;
+  }
+
+  async getPlayerBySummonerName(summonerName: string): Promise<Player | undefined> {
+    const all = await this.db.select().from(players);
+    return all.find((p) => p.summonerName.toLowerCase() === summonerName.toLowerCase());
+  }
+
+  async createPlayer(insertPlayer: InsertPlayer): Promise<Player> {
+    const [player] = await this.db
+      .insert(players)
+      .values({
+        ...insertPlayer,
+        discordName: insertPlayer.discordName ?? "",
+        mainPosition2: insertPlayer.mainPosition2 ?? "",
+        subPosition: insertPlayer.subPosition ?? null,
+        subPosition2: insertPlayer.subPosition2 ?? null,
+        rank: insertPlayer.rank || null,
+        leaguePoints: insertPlayer.leaguePoints || 0,
+        wins: insertPlayer.wins || 0,
+        losses: insertPlayer.losses || 0,
+        winRate: insertPlayer.winRate || 0,
+        level: insertPlayer.level || 1,
+        positions: insertPlayer.positions || [],
+        mmr: insertPlayer.mmr || 1200,
+        manualTier: insertPlayer.manualTier || null,
+        manualRank: insertPlayer.manualRank || null,
+      })
+      .returning();
+    return player;
+  }
+
+  async updatePlayer(id: string, updateData: Partial<InsertPlayer>): Promise<Player | undefined> {
+    const [updated] = await this.db
+      .update(players)
+      .set({ ...updateData, lastUpdated: new Date().toISOString() })
+      .where(eq(players.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deletePlayer(id: string): Promise<boolean> {
+    const deleted = await this.db.delete(players).where(eq(players.id, id)).returning();
+    return deleted.length > 0;
+  }
+
+  async getAllPlayers(): Promise<Player[]> {
+    return this.db.select().from(players);
+  }
+
+  // ---- Teams ----
+  async getTeam(id: string): Promise<Team | undefined> {
+    const [team] = await this.db.select().from(teams).where(eq(teams.id, id)).limit(1);
+    return team;
+  }
+
+  async createTeam(insertTeam: InsertTeam): Promise<Team> {
+    const [team] = await this.db
+      .insert(teams)
+      .values({
+        ...insertTeam,
+        players: insertTeam.players || [],
+        averageMmr: insertTeam.averageMmr || 0,
+        averageWinRate: insertTeam.averageWinRate || 0,
+        teamScore: insertTeam.teamScore || 0,
+      })
+      .returning();
+    return team;
+  }
+
+  async getAllTeams(): Promise<Team[]> {
+    return this.db.select().from(teams);
+  }
+
+  // ---- Balance results ----
+  async createBalanceResult(insertResult: InsertBalanceResult): Promise<BalanceResult> {
+    const [result] = await this.db
+      .insert(balanceResults)
+      .values({
+        ...insertResult,
+        balanceScore: insertResult.balanceScore || 0,
+        mmrDifference: insertResult.mmrDifference || 0,
+        winRateDifference: insertResult.winRateDifference || 0,
+        positionBalance: insertResult.positionBalance || 0,
+        winner: insertResult.winner ?? null,
+      })
+      .returning();
+    return result;
+  }
+
+  async getBalanceResult(id: string): Promise<BalanceResult | undefined> {
+    const [result] = await this.db.select().from(balanceResults).where(eq(balanceResults.id, id)).limit(1);
+    return result;
+  }
+
+  async getBalanceResults(limit = 10): Promise<BalanceResult[]> {
+    return this.db.select().from(balanceResults).orderBy(desc(balanceResults.createdAt)).limit(limit);
+  }
+
+  async getAllBalanceResults(): Promise<BalanceResult[]> {
+    return this.db.select().from(balanceResults).orderBy(desc(balanceResults.createdAt));
+  }
+
+  async updateBalanceResultWinner(id: string, winner: string | null): Promise<BalanceResult | undefined> {
+    const [updated] = await this.db
+      .update(balanceResults)
+      .set({ winner })
+      .where(eq(balanceResults.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteBalanceResult(id: string): Promise<boolean> {
+    const deleted = await this.db.delete(balanceResults).where(eq(balanceResults.id, id)).returning();
+    return deleted.length > 0;
+  }
+
+  async clearBalanceResults(): Promise<void> {
+    await this.db.delete(balanceResults);
+  }
+
+  // ---- Presets ----
+  async createPreset(insertPreset: InsertPreset): Promise<Preset> {
+    const [preset] = await this.db
+      .insert(presets)
+      .values({
+        ...insertPreset,
+        playerNames: insertPreset.playerNames || [],
+        description: insertPreset.description || null,
+      })
+      .returning();
+    return preset;
+  }
+
+  async getPreset(id: string): Promise<Preset | undefined> {
+    const [preset] = await this.db.select().from(presets).where(eq(presets.id, id)).limit(1);
+    return preset;
+  }
+
+  async getAllPresets(): Promise<Preset[]> {
+    return this.db.select().from(presets).orderBy(desc(presets.createdAt));
+  }
+
+  async updatePreset(id: string, updateData: Partial<InsertPreset>): Promise<Preset | undefined> {
+    const [updated] = await this.db.update(presets).set(updateData).where(eq(presets.id, id)).returning();
+    return updated;
+  }
+
+  async deletePreset(id: string): Promise<boolean> {
+    const deleted = await this.db.delete(presets).where(eq(presets.id, id)).returning();
+    return deleted.length > 0;
+  }
+
+  // ---- Balance settings ----
+  async createBalanceSettings(insertSettings: InsertBalanceSettings): Promise<BalanceSettings> {
+    const [settings] = await this.db
+      .insert(balanceSettingsTable)
+      .values({
+        ...insertSettings,
+        isDefault: insertSettings.isDefault ?? false,
+        mmrWeight: insertSettings.mmrWeight ?? 0.7,
+        positionWeight: insertSettings.positionWeight ?? 0.3,
+        winRateWeight: insertSettings.winRateWeight ?? 0,
+        topWeight: insertSettings.topWeight ?? 1.0,
+        jgWeight: insertSettings.jgWeight ?? 1.1,
+        midWeight: insertSettings.midWeight ?? 1.2,
+        adcWeight: insertSettings.adcWeight ?? 1.0,
+        supWeight: insertSettings.supWeight ?? 0.9,
+        mmrTolerance: insertSettings.mmrTolerance ?? 20.0,
+      })
+      .returning();
+    return settings;
+  }
+
+  async getBalanceSettings(id: string): Promise<BalanceSettings | undefined> {
+    const [settings] = await this.db
+      .select()
+      .from(balanceSettingsTable)
+      .where(eq(balanceSettingsTable.id, id))
+      .limit(1);
+    return settings;
+  }
+
+  async getAllBalanceSettings(): Promise<BalanceSettings[]> {
+    await this.ready;
+    return this.db.select().from(balanceSettingsTable).orderBy(desc(balanceSettingsTable.createdAt));
+  }
+
+  async getDefaultBalanceSettings(): Promise<BalanceSettings | undefined> {
+    await this.ready;
+    const [settings] = await this.db
+      .select()
+      .from(balanceSettingsTable)
+      .where(eq(balanceSettingsTable.isDefault, true))
+      .limit(1);
+    return settings;
+  }
+
+  async updateBalanceSettings(id: string, updateData: Partial<InsertBalanceSettings>): Promise<BalanceSettings | undefined> {
+    const [updated] = await this.db
+      .update(balanceSettingsTable)
+      .set({ ...updateData, updatedAt: new Date() })
+      .where(eq(balanceSettingsTable.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteBalanceSettings(id: string): Promise<boolean> {
+    const [existing] = await this.db
+      .select()
+      .from(balanceSettingsTable)
+      .where(eq(balanceSettingsTable.id, id))
+      .limit(1);
+    if (existing?.isDefault) {
+      return false;
+    }
+    const deleted = await this.db.delete(balanceSettingsTable).where(eq(balanceSettingsTable.id, id)).returning();
+    return deleted.length > 0;
+  }
+}
+
+// DATABASE_URL이 설정되어 있으면 자동으로 PostgreSQL(DatabaseStorage)을 사용하고,
+// 없으면 기존처럼 로컬 JSON 파일(MemStorage)에 저장합니다.
+export const storage: IStorage = process.env.DATABASE_URL
+  ? new DatabaseStorage(createDb())
+  : new MemStorage();
+
+if (process.env.DATABASE_URL) {
+  console.log("✅ PostgreSQL 데이터베이스에 연결되어 데이터를 저장합니다.");
+} else {
+  console.log("💾 DATABASE_URL이 없어 로컬 JSON 파일(data 폴더)에 데이터를 저장합니다.");
+}
