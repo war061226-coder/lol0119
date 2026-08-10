@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type Player, type Position } from "@shared/schema";
-import { Check, Database, Pencil, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, Database, Pencil, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
 
 const tiers = ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND", "MASTER", "GRANDMASTER", "CHALLENGER"];
 const ranks = ["IV", "III", "II", "I"];
@@ -18,6 +18,34 @@ const positions: { value: Position; label: string }[] = [
   { value: "ADC", label: "원딜" },
   { value: "SUP", label: "서폿" },
 ];
+
+const TIER_ORDER: Record<string, number> = {
+  IRON: 1,
+  BRONZE: 2,
+  SILVER: 3,
+  GOLD: 4,
+  PLATINUM: 5,
+  EMERALD: 6,
+  DIAMOND: 7,
+  MASTER: 8,
+  GRANDMASTER: 9,
+  CHALLENGER: 10,
+};
+const RANK_ORDER: Record<string, number> = { IV: 1, III: 2, II: 3, I: 4 };
+const POSITION_ORDER: Record<string, number> = { TOP: 1, JG: 2, MID: 3, ADC: 4, SUP: 5 };
+
+function getTierSortValue(tier: string, rank: string | null) {
+  const tierValue = TIER_ORDER[tier] ?? 0;
+  const rankValue = rank ? (RANK_ORDER[rank] ?? 0) : 2.5;
+  return tierValue * 10 + rankValue;
+}
+
+function getPositionSortValue(position?: string | null) {
+  return position ? (POSITION_ORDER[position] ?? 99) : 99;
+}
+
+type SortColumn = "tier" | "mainPosition" | "subPosition";
+type SortDirection = "desc" | "asc";
 
 type ManualForm = {
   discordName: string;
@@ -82,6 +110,42 @@ export default function ManualPlayerDbSection({
   const { data: playersData, isLoading } = useQuery<Player[]>({ queryKey: ["/api/players"] });
   const players = playersData ?? EMPTY_PLAYERS;
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  const sortedPlayers = useMemo(() => {
+    if (!sortColumn) return players;
+    const sorted = [...players].sort((a, b) => {
+      let diff = 0;
+      switch (sortColumn) {
+        case "tier":
+          diff = getTierSortValue(a.tier, a.rank) - getTierSortValue(b.tier, b.rank);
+          break;
+        case "mainPosition":
+          diff = getPositionSortValue(a.mainPosition) - getPositionSortValue(b.mainPosition);
+          break;
+        case "subPosition":
+          diff = getPositionSortValue(a.subPosition) - getPositionSortValue(b.subPosition);
+          break;
+      }
+      return sortDirection === "desc" ? -diff : diff;
+    });
+    return sorted;
+  }, [players, sortColumn, sortDirection]);
+
+  const toggleSort = (column: SortColumn) => {
+    if (sortColumn !== column) {
+      setSortColumn(column);
+      setSortDirection("desc");
+      return;
+    }
+    setSortDirection((current) => (current === "desc" ? "asc" : "desc"));
+  };
+
+  const renderSortIcon = (column: SortColumn) => {
+    if (sortColumn !== column) return <ArrowUpDown className="h-3.5 w-3.5" />;
+    return sortDirection === "desc" ? <ArrowDown className="h-3.5 w-3.5" /> : <ArrowUp className="h-3.5 w-3.5" />;
+  };
 
   useEffect(() => {
     const validIds = selectedIds.filter((id) => players.some((player) => player.id === id));
@@ -161,7 +225,7 @@ export default function ManualPlayerDbSection({
       toast({ title: "플레이어가 부족합니다.", description: `현재 ${players.length}명만 등록되어 있어 10명을 선택할 수 없습니다.`, variant: "destructive" });
       return;
     }
-    onSelectedIdsChange(players.slice(0, 10).map((player) => player.id));
+    onSelectedIdsChange(sortedPlayers.slice(0, 10).map((player) => player.id));
   };
 
   return (
@@ -237,10 +301,45 @@ export default function ManualPlayerDbSection({
               <div className="overflow-x-auto rounded-md border border-border">
                 <table className="w-full min-w-[760px] text-sm">
                   <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-                    <tr><th className="px-3 py-2">선택</th><th className="px-3 py-2">디코 닉네임</th><th className="px-3 py-2">닉네임#태그</th><th className="px-3 py-2">티어</th><th className="px-3 py-2">주포지션</th><th className="px-3 py-2">부포지션</th><th className="px-3 py-2">관리</th></tr>
+                    <tr>
+                      <th className="px-3 py-2">선택</th>
+                      <th className="px-3 py-2">디코 닉네임</th>
+                      <th className="px-3 py-2">닉네임#태그</th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleSort("tier")}
+                          className="flex items-center gap-1 hover:text-foreground transition-colors"
+                          data-testid="button-sort-tier"
+                        >
+                          티어 {renderSortIcon("tier")}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleSort("mainPosition")}
+                          className="flex items-center gap-1 hover:text-foreground transition-colors"
+                          data-testid="button-sort-main-position"
+                        >
+                          주포지션 {renderSortIcon("mainPosition")}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleSort("subPosition")}
+                          className="flex items-center gap-1 hover:text-foreground transition-colors"
+                          data-testid="button-sort-sub-position"
+                        >
+                          부포지션 {renderSortIcon("subPosition")}
+                        </button>
+                      </th>
+                      <th className="px-3 py-2">관리</th>
+                    </tr>
                   </thead>
                   <tbody>
-                    {players.map((player) => (
+                    {sortedPlayers.map((player) => (
                       <tr key={player.id} className={`border-t border-border/60 ${selectedSet.has(player.id) ? "bg-primary/10" : ""}`}>
                         <td className="px-3 py-2"><Button type="button" variant={selectedSet.has(player.id) ? "default" : "outline"} size="sm" className="h-7 px-2" onClick={() => toggleSelected(player.id)}><Check className={`h-4 w-4 mr-1 ${selectedSet.has(player.id) ? "" : "opacity-30"}`} />{selectedSet.has(player.id) ? "선택됨" : "선택"}</Button></td>
                         <td className="px-3 py-2 font-medium">{player.discordName || "-"}</td>
