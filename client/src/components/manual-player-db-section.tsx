@@ -299,10 +299,11 @@ export default function ManualPlayerDbSection({
               </div>
             ) : (
               <div className="overflow-x-auto rounded-md border border-border">
-                <table className="w-full min-w-[760px] text-sm">
+                <table className="w-full min-w-[800px] text-sm">
                   <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2">선택</th>
+                      <th className="px-3 py-2">번호</th>
                       <th className="px-3 py-2">디코 닉네임</th>
                       <th className="px-3 py-2">닉네임#태그</th>
                       <th className="px-3 py-2">
@@ -339,9 +340,10 @@ export default function ManualPlayerDbSection({
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedPlayers.map((player) => (
+                    {sortedPlayers.map((player, index) => (
                       <tr key={player.id} className={`border-t border-border/60 ${selectedSet.has(player.id) ? "bg-primary/10" : ""}`}>
                         <td className="px-3 py-2"><Button type="button" variant={selectedSet.has(player.id) ? "default" : "outline"} size="sm" className="h-7 px-2" onClick={() => toggleSelected(player.id)}><Check className={`h-4 w-4 mr-1 ${selectedSet.has(player.id) ? "" : "opacity-30"}`} />{selectedSet.has(player.id) ? "선택됨" : "선택"}</Button></td>
+                        <td className="px-3 py-2 text-center text-muted-foreground font-mono text-xs">{index + 1}</td>
                         <td className="px-3 py-2 font-medium">{player.discordName || "-"}</td>
                         <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{player.summonerName}</td>
                         <td className="px-3 py-2">{player.tier} {player.rank || ""}</td>
