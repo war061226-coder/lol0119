@@ -465,6 +465,9 @@ export class TeamBalancer {
     const chosenPositions = bestAssignment || team.map((player) => player.mainPosition as Position);
     return team.map((player, index) => ({
       ...player,
+      // 실제 밸런싱 계산에 쓰인 유효 MMR(수동 티어 지정 시 티어 기반 계산값)을
+      // 그대로 반영해서, 화면에 표시되는 MMR과 계산에 쓰인 MMR이 항상 같게 만듭니다.
+      mmr: this.getEffectiveMMR(player),
       recommendedPosition: chosenPositions[index] || (player.mainPosition as Position),
     }));
   }

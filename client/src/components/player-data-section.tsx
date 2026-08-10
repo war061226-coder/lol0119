@@ -3,7 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { type Player } from "@shared/schema";
+
+const POSITION_SORT_ORDER: Record<string, number> = { TOP: 1, JG: 2, MID: 3, ADC: 4, SUP: 5 };
+const getPositionSortValue = (position?: string | null) =>
+  position ? (POSITION_SORT_ORDER[position] ?? 99) : 99;
 
 interface PlayerDataSectionProps {
   players: Player[];
@@ -23,6 +28,7 @@ export default function PlayerDataSection({
   isRefreshing = false
 }: PlayerDataSectionProps) {
   const [sortBy, setSortBy] = useState<string>("tier");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [editingPlayer, setEditingPlayer] = useState<string | null>(null);
   const [editData, setEditData] = useState<Partial<Player>>({});
 
@@ -158,26 +164,41 @@ export default function PlayerDataSection({
   };
 
   const sortedPlayers = [...players].sort((a, b) => {
+    let diff = 0;
     switch (sortBy) {
       case 'tier':
         // Sort by tier/rank/LP combination
-        return getTierValue(b) - getTierValue(a);
-      case 'mmr':
+        diff = getTierValue(b) - getTierValue(a);
+        break;
+      case 'mainPosition':
+        diff = getPositionSortValue(a.mainPosition) - getPositionSortValue(b.mainPosition);
+        break;
+      case 'subPosition':
+        diff = getPositionSortValue(a.subPosition) - getPositionSortValue(b.subPosition);
+        break;
+      case 'mmr': {
         // Sort by MMR with fallback to tier if MMR is invalid
         const mmrA = typeof a.mmr === 'number' && !isNaN(a.mmr) ? a.mmr : getTierValue(a) * 10;
         const mmrB = typeof b.mmr === 'number' && !isNaN(b.mmr) ? b.mmr : getTierValue(b) * 10;
-        return mmrB - mmrA;
+        diff = mmrB - mmrA;
+        break;
+      }
       case 'name':
-        return a.summonerName.localeCompare(b.summonerName);
-      case 'winrate':
+        diff = a.summonerName.localeCompare(b.summonerName);
+        break;
+      case 'winrate': {
         const winrateA = typeof a.winRate === 'number' && !isNaN(a.winRate) ? a.winRate : 0;
         const winrateB = typeof b.winRate === 'number' && !isNaN(b.winRate) ? b.winRate : 0;
-        return winrateB - winrateA;
+        diff = winrateB - winrateA;
+        break;
+      }
       case 'level':
-        return (b.level || 0) - (a.level || 0);
+        diff = (b.level || 0) - (a.level || 0);
+        break;
       default:
-        return 0;
+        diff = 0;
     }
+    return sortDirection === 'desc' ? diff : -diff;
   });
 
   return (
@@ -205,17 +226,33 @@ export default function PlayerDataSection({
               )}
               <span className="text-sm text-muted-foreground">정렬:</span>
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-24">
+                <SelectTrigger className="w-28">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="tier">티어순</SelectItem>
+                  <SelectItem value="mainPosition">주라인순</SelectItem>
+                  <SelectItem value="subPosition">부라인순</SelectItem>
                   <SelectItem value="mmr">MMR순</SelectItem>
                   <SelectItem value="winrate">승율순</SelectItem>
                   <SelectItem value="level">레벨순</SelectItem>
                   <SelectItem value="name">이름순</SelectItem>
                 </SelectContent>
               </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => setSortDirection((current) => (current === "desc" ? "asc" : "desc"))}
+                aria-label="정렬 방향 전환"
+                data-testid="button-toggle-sort-direction"
+              >
+                {sortDirection === "desc" ? (
+                  <ArrowDown className="h-4 w-4" />
+                ) : (
+                  <ArrowUp className="h-4 w-4" />
+                )}
+              </Button>
             </div>
           </div>
 

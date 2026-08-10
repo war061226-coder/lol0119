@@ -7,11 +7,34 @@ import { Button } from "@/components/ui/button";
 import { type InhousePlayerStats, type InhouseStatsSummary } from "@shared/schema";
 import LoadingSpinner from "./loading-spinner";
 
-type WinRateSortDirection = "desc" | "asc" | null;
+type SortColumn = "tier" | "games" | "wins" | "losses" | "winRate";
+type SortDirection = "desc" | "asc";
+
+const TIER_ORDER: Record<string, number> = {
+  IRON: 1,
+  BRONZE: 2,
+  SILVER: 3,
+  GOLD: 4,
+  PLATINUM: 5,
+  EMERALD: 6,
+  DIAMOND: 7,
+  MASTER: 8,
+  GRANDMASTER: 9,
+  CHALLENGER: 10,
+};
+
+const RANK_ORDER: Record<string, number> = { IV: 1, III: 2, II: 3, I: 4 };
+
+function getTierSortValue(tier: string, rank: string | null): number {
+  const tierValue = TIER_ORDER[tier] ?? 0;
+  const rankValue = rank ? (RANK_ORDER[rank] ?? 0) : 2.5;
+  return tierValue * 10 + rankValue;
+}
 
 export default function InhouseStats() {
   const [expandedPlayerIds, setExpandedPlayerIds] = useState<Set<string>>(new Set());
-  const [winRateSort, setWinRateSort] = useState<WinRateSortDirection>(null);
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const { data, isLoading, error } = useQuery<InhouseStatsSummary>({
     queryKey: ["/api/inhouse-stats"],
     queryFn: async () => {
@@ -24,22 +47,44 @@ export default function InhouseStats() {
 
   const sortedPlayers = useMemo(() => {
     const players = data?.players ?? [];
-    if (!winRateSort) return players;
+    if (!sortColumn) return players;
     const sorted = [...players].sort((a, b) => {
-      if (b.winRate !== a.winRate) {
-        return winRateSort === "desc" ? b.winRate - a.winRate : a.winRate - b.winRate;
+      let diff = 0;
+      switch (sortColumn) {
+        case "tier":
+          diff = getTierSortValue(a.tier, a.rank) - getTierSortValue(b.tier, b.rank);
+          break;
+        case "games":
+          diff = a.games - b.games;
+          break;
+        case "wins":
+          diff = a.wins - b.wins;
+          break;
+        case "losses":
+          diff = a.losses - b.losses;
+          break;
+        case "winRate":
+          diff = a.winRate - b.winRate;
+          break;
       }
-      return b.games - a.games;
+      if (diff === 0) diff = a.games - b.games;
+      return sortDirection === "desc" ? -diff : diff;
     });
     return sorted;
-  }, [data?.players, winRateSort]);
+  }, [data?.players, sortColumn, sortDirection]);
 
-  const toggleWinRateSort = () => {
-    setWinRateSort((current) => {
-      if (current === null) return "desc";
-      if (current === "desc") return "asc";
-      return null;
-    });
+  const toggleSort = (column: SortColumn) => {
+    if (sortColumn !== column) {
+      setSortColumn(column);
+      setSortDirection("desc");
+      return;
+    }
+    setSortDirection((current) => (current === "desc" ? "asc" : "desc"));
+  };
+
+  const renderSortIcon = (column: SortColumn) => {
+    if (sortColumn !== column) return <ArrowUpDown className="h-3 w-3" />;
+    return sortDirection === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />;
   };
 
   if (isLoading) {
@@ -151,25 +196,55 @@ export default function InhouseStats() {
             <div className="min-w-[720px]">
               <div className="grid grid-cols-[2fr_1.2fr_repeat(4,0.8fr)] gap-3 px-4 py-3 text-xs text-muted-foreground border-b">
                 <span>플레이어</span>
-                <span>티어</span>
-                <span className="text-center">경기</span>
-                <span className="text-center">승</span>
-                <span className="text-center">패</span>
                 <button
                   type="button"
-                  onClick={toggleWinRateSort}
+                  onClick={() => toggleSort("tier")}
+                  className="flex items-center gap-1 hover:text-foreground transition-colors"
+                  aria-label="티어 기준 정렬"
+                  data-testid="button-sort-tier"
+                >
+                  티어
+                  {renderSortIcon("tier")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleSort("games")}
+                  className="flex items-center justify-center gap-1 text-center hover:text-foreground transition-colors"
+                  aria-label="경기 수 기준 정렬"
+                  data-testid="button-sort-games"
+                >
+                  경기
+                  {renderSortIcon("games")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleSort("wins")}
+                  className="flex items-center justify-center gap-1 text-center hover:text-foreground transition-colors"
+                  aria-label="승 기준 정렬"
+                  data-testid="button-sort-wins"
+                >
+                  승
+                  {renderSortIcon("wins")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleSort("losses")}
+                  className="flex items-center justify-center gap-1 text-center hover:text-foreground transition-colors"
+                  aria-label="패 기준 정렬"
+                  data-testid="button-sort-losses"
+                >
+                  패
+                  {renderSortIcon("losses")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleSort("winRate")}
                   className="flex items-center justify-center gap-1 text-center hover:text-foreground transition-colors"
                   aria-label="승률 기준 정렬"
                   data-testid="button-sort-winrate"
                 >
                   승률
-                  {winRateSort === "desc" ? (
-                    <ArrowDown className="h-3 w-3" />
-                  ) : winRateSort === "asc" ? (
-                    <ArrowUp className="h-3 w-3" />
-                  ) : (
-                    <ArrowUpDown className="h-3 w-3" />
-                  )}
+                  {renderSortIcon("winRate")}
                 </button>
               </div>
               <div className="divide-y">
