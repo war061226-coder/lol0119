@@ -473,6 +473,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         positionBalance: balanceResult.positionMatch,
       });
 
+      // 주라인1 우선배정 천장(pity) 시스템: 이번에 실제로 배정된 라인을 기준으로
+      // 각 선수의 누적 점수를 갱신합니다. (주라인1 배정 시 0으로 초기화,
+      // 그 외에는 주라인2 +5 / 부라인1 +10 / 부라인2 +20 / 부라인3 +30)
+      const assignedTeamPlayers = [...balanceResult.blueTeam.players, ...balanceResult.redTeam.players];
+      await Promise.all(
+        assignedTeamPlayers.map((assignedPlayer) => {
+          const originalPlayer = players.find((player) => player.id === assignedPlayer.id);
+          if (!originalPlayer || !assignedPlayer.recommendedPosition) return Promise.resolve(undefined);
+          const nextPityScore = TeamBalancer.computeNextPityScore(
+            originalPlayer,
+            assignedPlayer.recommendedPosition,
+          );
+          if (nextPityScore === (originalPlayer.pityScore ?? 0)) return Promise.resolve(undefined);
+          return storage.updatePlayer(originalPlayer.id, { pityScore: nextPityScore });
+        }),
+      );
+
       // Return the balance result with the ID for sharing
       res.json({
         ...balanceResult,

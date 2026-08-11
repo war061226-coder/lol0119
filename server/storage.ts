@@ -106,6 +106,7 @@ export class MemStorage implements IStorage {
       mmr: insertPlayer.mmr || 1200,
       manualTier: insertPlayer.manualTier || null,
       manualRank: insertPlayer.manualRank || null,
+      pityScore: insertPlayer.pityScore ?? 0,
       id, 
       lastUpdated: new Date().toISOString() 
     };
@@ -143,7 +144,8 @@ export class MemStorage implements IStorage {
     try {
       const savedPlayers = JSON.parse(readFileSync(this.playersFile, "utf8")) as Player[];
       for (const player of savedPlayers) {
-        this.players.set(player.id, player);
+        // 기존에 저장된 데이터에는 pityScore 필드가 없을 수 있으므로 기본값 0으로 보정합니다.
+        this.players.set(player.id, { ...player, pityScore: player.pityScore ?? 0 });
       }
     } catch (error) {
       console.error("수동 플레이어 DB를 불러오지 못했습니다:", error);
@@ -447,6 +449,7 @@ export class DatabaseStorage implements IStorage {
         mmr: insertPlayer.mmr || 1200,
         manualTier: insertPlayer.manualTier || null,
         manualRank: insertPlayer.manualRank || null,
+        pityScore: insertPlayer.pityScore ?? 0,
       })
       .returning();
     return player;

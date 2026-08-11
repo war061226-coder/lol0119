@@ -60,6 +60,10 @@ export const players = pgTable("players", {
   mmr: integer("mmr").notNull().default(1200),
   manualTier: text("manual_tier"),
   manualRank: text("manual_rank"),
+  // 주라인1 우선배정 천장(pity) 시스템 누적 점수.
+  // 주라인2 배정 +5, 부라인1 배정 +10, 부라인2 배정 +20, 부라인3 배정 +30.
+  // 50점 이상이면 다음 밸런싱에서 주라인1로 우선배정되며, 주라인1로 배정되는 순간 0으로 초기화됩니다.
+  pityScore: integer("pity_score").notNull().default(0),
   lastUpdated: text("last_updated").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

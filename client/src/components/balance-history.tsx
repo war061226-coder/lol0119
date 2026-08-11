@@ -375,6 +375,15 @@ export default function BalanceHistory({ limit = 10 }: BalanceHistoryProps) {
           {detailResult && (() => {
             const blueDetail = parseTeamDetail(detailResult.blueTeam);
             const redDetail = parseTeamDetail(detailResult.redTeam);
+            const POSITION_ORDER: Record<string, number> = { TOP: 0, JG: 1, MID: 2, ADC: 3, SUP: 4 };
+            const sortByPosition = (players: RecommendedPlayer[]) =>
+              [...players].sort((a, b) => {
+                const posA = a.recommendedPosition || a.mainPosition;
+                const posB = b.recommendedPosition || b.mainPosition;
+                const orderA = POSITION_ORDER[posA] ?? 99;
+                const orderB = POSITION_ORDER[posB] ?? 99;
+                return orderA - orderB;
+              });
             const renderPlayerRow = (player: RecommendedPlayer) => {
               const displayTier = player.manualTier || player.tier;
               const displayRank = player.manualRank || player.rank;
@@ -429,7 +438,7 @@ export default function BalanceHistory({ limit = 10 }: BalanceHistoryProps) {
                       )}
                     </div>
                     <div className="space-y-2">
-                      {blueDetail ? blueDetail.players.map(renderPlayerRow) : (
+                      {blueDetail ? sortByPosition(blueDetail.players).map(renderPlayerRow) : (
                         <div className="text-sm text-muted-foreground">팀 정보를 불러올 수 없습니다.</div>
                       )}
                     </div>
@@ -448,7 +457,7 @@ export default function BalanceHistory({ limit = 10 }: BalanceHistoryProps) {
                       )}
                     </div>
                     <div className="space-y-2">
-                      {redDetail ? redDetail.players.map(renderPlayerRow) : (
+                      {redDetail ? sortByPosition(redDetail.players).map(renderPlayerRow) : (
                         <div className="text-sm text-muted-foreground">팀 정보를 불러올 수 없습니다.</div>
                       )}
                     </div>

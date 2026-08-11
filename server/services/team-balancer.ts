@@ -65,6 +65,86 @@ export class TeamBalancer {
     return player.mmr;
   }
 
+  // 배정된 라인이 그 선수의 몇 번째 선호 포지션인지에 따라 MMR에 곱하는 배율.
+  // 주라인1(가장 선호) 100% -> 주라인2 95% -> 부라인1 90% -> 부라인2 85% -> 부라인3(미등록 라인) 80%
+  private readonly POSITION_PREFERENCE_MULTIPLIER = {
+    PRIMARY_1: 1.0,
+    PRIMARY_2: 0.95,
+    SECONDARY_1: 0.9,
+    SECONDARY_2: 0.85,
+    SECONDARY_3: 0.8,
+  } as const;
+
+  private getPositionPreferenceMultiplier(player: Player, position: Position): number {
+    if (player.mainPosition === position) return this.POSITION_PREFERENCE_MULTIPLIER.PRIMARY_1;
+    if (player.mainPosition2 === position) return this.POSITION_PREFERENCE_MULTIPLIER.PRIMARY_2;
+    if (player.subPosition === position) return this.POSITION_PREFERENCE_MULTIPLIER.SECONDARY_1;
+    if (player.subPosition2 === position) return this.POSITION_PREFERENCE_MULTIPLIER.SECONDARY_2;
+    // 4개 선호 라인(주1/주2/부1/부2) 어디에도 등록되지 않은 라인으로 배정된 경우(부라인3)
+    return this.POSITION_PREFERENCE_MULTIPLIER.SECONDARY_3;
+  }
+
+  // ---------------------------------------------------------------------
+  // 주라인1 우선배정 천장(pity) 시스템
+  // ---------------------------------------------------------------------
+  // 주라인2 배정 +5, 부라인1 배정 +10, 부라인2 배정 +20, 부라인3 배정 +30점씩 누적되고,
+  // 누적 점수가 PITY_THRESHOLD(50점) 이상이면 다음 밸런싱에서 주라인1로 우선배정됩니다.
+  // 주라인1로 배정되는 순간(우선배정이든 자연배정이든) 점수는 0으로 초기화됩니다.
+  static readonly PITY_THRESHOLD = 50;
+  static readonly PITY_POINTS = {
+    PRIMARY_2: 5,
+    SECONDARY_1: 10,
+    SECONDARY_2: 20,
+    SECONDARY_3: 30,
+  } as const;
+
+  /**
+   * 이번 판에서 player가 assignedPosition으로 배정되었을 때, 다음 판을 위한
+   * pityScore를 계산합니다. 주라인1로 배정되면 무조건 0으로 초기화되고,
+   * 그 외에는 배정된 라인의 선호 순위에 따라 점수가 가산됩니다.
+   */
+  static computeNextPityScore(player: Player, assignedPosition: Position): number {
+    const currentScore = player.pityScore ?? 0;
+    if (player.mainPosition === assignedPosition) return 0;
+    if (player.mainPosition2 === assignedPosition) return currentScore + TeamBalancer.PITY_POINTS.PRIMARY_2;
+    if (player.subPosition === assignedPosition) return currentScore + TeamBalancer.PITY_POINTS.SECONDARY_1;
+    if (player.subPosition2 === assignedPosition) return currentScore + TeamBalancer.PITY_POINTS.SECONDARY_2;
+    return currentScore + TeamBalancer.PITY_POINTS.SECONDARY_3;
+  }
+
+  /**
+   * 같은 팀(5명) 안에서 pityScore가 임계값 이상인 선수들에게 "주라인1(자신의
+   * mainPosition)"을 강제로 우선배정하기 위한 보너스 점수를 계산합니다.
+   * - 점수가 높은 선수일수록 더 큰 보너스를 받아 우선순위가 높습니다.
+   * - 동점인 경우 매 밸런싱 실행마다 무작위로 순위를 정해 랜덤 배정을 구현합니다.
+   * - 보너스 값은 일반적인 포지션 선호 점수(최대 수백 점 수준)를 항상 압도하도록
+   *   충분히 크게 잡아, 탐색 알고리즘이 가능하면 반드시 이 배정을 선택하게 만듭니다.
+   */
+  private computePityPriorityBonuses(team: Player[]): Map<string, number> {
+    const PITY_BASE_BONUS = 1_000_000;
+    const PITY_STEP = 1_000;
+
+    const eligiblePlayers = team.filter(
+      (player) => (player.pityScore ?? 0) >= TeamBalancer.PITY_THRESHOLD,
+    );
+
+    // 점수 내림차순으로 정렬하되, 동점자는 무작위 값으로 순서를 섞어 랜덤 배정을 구현합니다.
+    const ranked = eligiblePlayers
+      .map((player) => ({ id: player.id, score: player.pityScore ?? 0, tieBreaker: Math.random() }))
+      .sort((a, b) => b.score - a.score || b.tieBreaker - a.tieBreaker);
+
+    const bonuses = new Map<string, number>();
+    ranked.forEach((entry, rank) => {
+      bonuses.set(entry.id, PITY_BASE_BONUS - rank * PITY_STEP);
+    });
+    return bonuses;
+  }
+
+  // 실제로 배정된 라인 기준, 선호도 배율까지 반영한 MMR
+  private getWeightedMmrForPosition(player: Player, position: Position): number {
+    return this.getEffectiveMMR(player) * this.getPositionPreferenceMultiplier(player, position);
+  }
+
   private recordedWinRates = new Map<string, number>();
 
   private getEffectiveWinRate(player: Player): number {
@@ -399,7 +479,9 @@ export class TeamBalancer {
 
   private calculateTeamComposition(team: Player[]): TeamComposition {
     const recommendedPlayers = this.assignRecommendedPositions(team);
-    const totalMmr = recommendedPlayers.reduce((sum, player) => sum + this.getEffectiveMMR(player), 0);
+    // recommendedPlayers[].mmr은 이미 주/부라인 선호도 배율(100/95/90/85%)이
+    // 반영된 값이므로, 그대로 합산해서 평균/팀 점수를 계산합니다.
+    const totalMmr = recommendedPlayers.reduce((sum, player) => sum + player.mmr, 0);
     const totalWinRate = recommendedPlayers.reduce((sum, player) => sum + this.getEffectiveWinRate(player), 0);
     const averageMmr = totalMmr / recommendedPlayers.length;
     const averageWinRate = totalWinRate / recommendedPlayers.length;
@@ -407,7 +489,7 @@ export class TeamBalancer {
     // Calculate team score based on weighted MMR
     const teamScore = recommendedPlayers.reduce((sum, player) => {
       const positionWeight = this.POSITION_WEIGHTS[(player.recommendedPosition || player.mainPosition) as Position] || 1.0;
-      return sum + (this.getEffectiveMMR(player) * positionWeight);
+      return sum + (player.mmr * positionWeight);
     }, 0) / recommendedPlayers.length;
     
     return {
@@ -428,6 +510,10 @@ export class TeamBalancer {
     const positions: Position[] = ["TOP", "JG", "MID", "ADC", "SUP"];
     let bestAssignment: Position[] | null = null;
     let bestScore = Number.NEGATIVE_INFINITY;
+
+    // 천장(pity) 시스템: 누적 점수가 임계값 이상인 선수는 이 팀 안에서 자신의
+    // 주라인1(mainPosition)에 강하게 우선배정되도록 탐색 점수에 보너스를 더합니다.
+    const pityBonuses = this.computePityPriorityBonuses(team);
 
     const search = (index: number, used: Set<Position>, assignment: Position[], score: number) => {
       if (index === team.length) {
@@ -450,9 +536,11 @@ export class TeamBalancer {
             ? (secondaryPositions[0] === position ? 70 : 60)
             : 0;
 
+        const pityBonus = position === player.mainPosition ? (pityBonuses.get(player.id) ?? 0) : 0;
+
         used.add(position);
         assignment.push(position);
-        search(index + 1, used, assignment, score + preferenceScore);
+        search(index + 1, used, assignment, score + preferenceScore + pityBonus);
         assignment.pop();
         used.delete(position);
       }
@@ -463,13 +551,17 @@ export class TeamBalancer {
     // A team normally has exactly five players. Keep a safe fallback for
     // callers that inspect this helper with a partial team.
     const chosenPositions = bestAssignment || team.map((player) => player.mainPosition as Position);
-    return team.map((player, index) => ({
-      ...player,
-      // 실제 밸런싱 계산에 쓰인 유효 MMR(수동 티어 지정 시 티어 기반 계산값)을
-      // 그대로 반영해서, 화면에 표시되는 MMR과 계산에 쓰인 MMR이 항상 같게 만듭니다.
-      mmr: this.getEffectiveMMR(player),
-      recommendedPosition: chosenPositions[index] || (player.mainPosition as Position),
-    }));
+    return team.map((player, index) => {
+      const recommendedPosition = chosenPositions[index] || (player.mainPosition as Position);
+      return {
+        ...player,
+        // 실제 밸런싱 계산에 쓰인 MMR(수동 티어 지정 시 티어 기반 계산값 + 주/부라인
+        // 선호도 배율)을 그대로 반영해서, 화면에 표시되는 MMR과 계산에 쓰인 MMR이
+        // 항상 같게 만듭니다. 주라인1 100% -> 주라인2 95% -> 부라인1 90% -> 부라인2 85%
+        mmr: Math.round(this.getWeightedMmrForPosition(player, recommendedPosition)),
+        recommendedPosition,
+      };
+    });
   }
 
   private calculateTeamScore(team: Player[]): number {
