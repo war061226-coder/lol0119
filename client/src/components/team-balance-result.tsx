@@ -519,6 +519,8 @@ export default function TeamBalanceResult({
     const positionIcon = getPositionIcon(recommendedPosition);
     const displayTier = player.manualTier || player.tier;
     const displayRank = player.manualRank || player.rank;
+    const pityScore = player.pityScore ?? 0;
+    const gotPityPriority = pityScore >= 50 && recommendedPosition === player.mainPosition;
     
     return (
       <div 
@@ -530,8 +532,17 @@ export default function TeamBalanceResult({
           <i className={`${positionIcon.icon} ${positionIcon.color} text-sm`}></i>
         </div>
         <div className="flex-1">
-          <div className="font-medium text-sm" data-testid={`text-player-name-${player.id}`}>
+          <div className="font-medium text-sm flex items-center gap-1.5" data-testid={`text-player-name-${player.id}`}>
             {player.summonerName}
+            {gotPityPriority && (
+              <span
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                title={`가산점 ${pityScore}점 누적으로 주라인1 우선배정됨`}
+                data-testid={`badge-pity-priority-${player.id}`}
+              >
+                🎯 천장 우선배정
+              </span>
+            )}
           </div>
           <div className="text-xs text-muted-foreground flex items-center space-x-2">
             <span className={getTierClassName(displayTier)} data-testid={`text-player-tier-${player.id}`}>
@@ -546,6 +557,18 @@ export default function TeamBalanceResult({
             <span data-testid={`text-player-position-${player.id}`}>
               추천 라인: <strong className="text-foreground">{recommendedPosition || "N/A"}</strong>
             </span>
+            {pityScore > 0 && (
+              <>
+                <span>•</span>
+                <span
+                  className={pityScore >= 50 ? "text-amber-400 font-semibold" : "text-muted-foreground"}
+                  data-testid={`text-player-pity-${player.id}`}
+                  title="주라인1 우선배정 가산점 (50점 이상이면 다음 밸런싱에서 우선배정)"
+                >
+                  가산점 {pityScore}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>

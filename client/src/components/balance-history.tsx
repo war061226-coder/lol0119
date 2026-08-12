@@ -388,6 +388,8 @@ export default function BalanceHistory({ limit = 10 }: BalanceHistoryProps) {
               const displayTier = player.manualTier || player.tier;
               const displayRank = player.manualRank || player.rank;
               const position = player.recommendedPosition || player.mainPosition;
+              const pityScore = player.pityScore ?? 0;
+              const gotPityPriority = pityScore >= 50 && position === player.mainPosition;
               return (
                 <div
                   key={player.id}
@@ -395,9 +397,24 @@ export default function BalanceHistory({ limit = 10 }: BalanceHistoryProps) {
                   data-testid={`detail-player-${detailResult.id}-${player.id}`}
                 >
                   <div className="min-w-0">
-                    <div className="font-medium truncate">{player.summonerName}</div>
+                    <div className="font-medium truncate flex items-center gap-1.5">
+                      {player.summonerName}
+                      {gotPityPriority && (
+                        <span
+                          className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0"
+                          title={`가산점 ${pityScore}점 누적으로 주라인1 우선배정됨`}
+                        >
+                          🎯 우선배정
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       {displayTier} {displayRank || ""} · MMR {player.mmr}
+                      {pityScore > 0 && (
+                        <span className={pityScore >= 50 ? "text-amber-400 font-semibold" : ""}>
+                          {" "}· 가산점 {pityScore}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <Badge variant="outline" className="shrink-0">{position}</Badge>

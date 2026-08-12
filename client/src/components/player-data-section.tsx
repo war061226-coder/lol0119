@@ -292,8 +292,21 @@ export default function PlayerDataSection({
                       )}
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-sm mb-1" data-testid={`text-summoner-name-${player.id}`}>
+                      <h3 className="font-semibold text-sm mb-1 flex items-center gap-1.5" data-testid={`text-summoner-name-${player.id}`}>
                         {player.summonerName}
+                        {(player.pityScore ?? 0) > 0 && (
+                          <span
+                            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0 ${
+                              (player.pityScore ?? 0) >= 50
+                                ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
+                                : "bg-muted text-muted-foreground border-border"
+                            }`}
+                            title="주라인1 우선배정 가산점 (50점 이상이면 다음 밸런싱에서 주라인1로 우선배정)"
+                            data-testid={`badge-pity-${player.id}`}
+                          >
+                            {(player.pityScore ?? 0) >= 50 ? "🎯 " : ""}가산점 {player.pityScore ?? 0}
+                          </span>
+                        )}
                       </h3>
                       {onUpdatePlayer && (
                         <div className="flex gap-1">

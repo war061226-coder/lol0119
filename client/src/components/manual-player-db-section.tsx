@@ -299,7 +299,7 @@ export default function ManualPlayerDbSection({
               </div>
             ) : (
               <div className="overflow-x-auto rounded-md border border-border">
-                <table className="w-full min-w-[800px] text-sm">
+                <table className="w-full min-w-[900px] text-sm">
                   <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2">선택</th>
@@ -336,6 +336,7 @@ export default function ManualPlayerDbSection({
                           부포지션 {renderSortIcon("subPosition")}
                         </button>
                       </th>
+                      <th className="px-3 py-2" title="주라인1 우선배정 가산점 (50점 이상 시 다음 밸런싱에서 우선배정)">가산점</th>
                       <th className="px-3 py-2">관리</th>
                     </tr>
                   </thead>
@@ -349,6 +350,23 @@ export default function ManualPlayerDbSection({
                         <td className="px-3 py-2">{player.tier} {player.rank || ""}</td>
                         <td className="px-3 py-2">{positionLabel(player.mainPosition)} / {positionLabel(player.mainPosition2)}</td>
                         <td className="px-3 py-2">{positionLabel(player.subPosition)} / {positionLabel(player.subPosition2)}</td>
+                        <td className="px-3 py-2">
+                          {(player.pityScore ?? 0) > 0 ? (
+                            <span
+                              className={`text-xs font-mono px-1.5 py-0.5 rounded-full border ${
+                                (player.pityScore ?? 0) >= 50
+                                  ? "bg-amber-500/20 text-amber-400 border-amber-500/40 font-semibold"
+                                  : "bg-muted text-muted-foreground border-border"
+                              }`}
+                              title="주라인1 우선배정 가산점 (50점 이상 시 다음 밸런싱에서 우선배정)"
+                              data-testid={`text-pity-${player.id}`}
+                            >
+                              {(player.pityScore ?? 0) >= 50 ? "🎯 " : ""}{player.pityScore}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground font-mono">0</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2">
                           <div className="flex gap-1">
                             <Button type="button" variant="outline" size="sm" className="h-7 px-2" onClick={() => startEdit(player)}><Pencil className="h-3.5 w-3.5 mr-1" /> 수정</Button>
