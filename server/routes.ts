@@ -249,6 +249,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     mainPosition2: z.enum(["TOP", "JG", "MID", "ADC", "SUP"]).or(z.literal("")).default(""),
     subPosition: z.enum(["TOP", "JG", "MID", "ADC", "SUP"]).nullable().default(null),
     subPosition2: z.enum(["TOP", "JG", "MID", "ADC", "SUP"]).nullable().default(null),
+    pityScore: z.coerce.number().int().min(0).max(999).optional(),
   });
 
   const createManualPlayer = (data: z.infer<typeof manualPlayerSchema>) => ({
@@ -269,6 +270,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     mmr: 1200,
     manualTier: data.tier,
     manualRank: data.rank ?? "II",
+    pityScore: data.pityScore ?? 0,
   });
 
   app.post("/api/players/manual", async (req, res) => {

@@ -520,7 +520,7 @@ export default function TeamBalanceResult({
     const displayTier = player.manualTier || player.tier;
     const displayRank = player.manualRank || player.rank;
     const pityScore = player.pityScore ?? 0;
-    const gotPityPriority = pityScore >= 50 && recommendedPosition === player.mainPosition;
+    const gotPityPriority = pityScore >= 35 && recommendedPosition === player.mainPosition;
     
     return (
       <div 
@@ -561,9 +561,9 @@ export default function TeamBalanceResult({
               <>
                 <span>•</span>
                 <span
-                  className={pityScore >= 50 ? "text-amber-400 font-semibold" : "text-muted-foreground"}
+                  className={pityScore >= 35 ? "text-amber-400 font-semibold" : "text-muted-foreground"}
                   data-testid={`text-player-pity-${player.id}`}
-                  title="주라인1 우선배정 가산점 (50점 이상이면 다음 밸런싱에서 우선배정)"
+                  title="주라인1 우선배정 가산점 (35점 이상이면 다음 밸런싱에서 우선배정)"
                 >
                   가산점 {pityScore}
                 </span>

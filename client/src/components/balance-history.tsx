@@ -389,7 +389,7 @@ export default function BalanceHistory({ limit = 10 }: BalanceHistoryProps) {
               const displayRank = player.manualRank || player.rank;
               const position = player.recommendedPosition || player.mainPosition;
               const pityScore = player.pityScore ?? 0;
-              const gotPityPriority = pityScore >= 50 && position === player.mainPosition;
+              const gotPityPriority = pityScore >= 35 && position === player.mainPosition;
               return (
                 <div
                   key={player.id}
@@ -411,7 +411,7 @@ export default function BalanceHistory({ limit = 10 }: BalanceHistoryProps) {
                     <div className="text-xs text-muted-foreground">
                       {displayTier} {displayRank || ""} · MMR {player.mmr}
                       {pityScore > 0 && (
-                        <span className={pityScore >= 50 ? "text-amber-400 font-semibold" : ""}>
+                        <span className={pityScore >= 35 ? "text-amber-400 font-semibold" : ""}>
                           {" "}· 가산점 {pityScore}
                         </span>
                       )}

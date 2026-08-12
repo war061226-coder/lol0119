@@ -44,7 +44,7 @@ function getPositionSortValue(position?: string | null) {
   return position ? (POSITION_ORDER[position] ?? 99) : 99;
 }
 
-type SortColumn = "tier" | "mainPosition" | "subPosition";
+type SortColumn = "tier" | "mainPosition" | "subPosition" | "pity";
 type SortDirection = "desc" | "asc";
 
 type ManualForm = {
@@ -56,6 +56,7 @@ type ManualForm = {
   mainPosition2: Position | "";
   subPosition: Position | "";
   subPosition2: Position | "";
+  pityScore: number;
 };
 
 const emptyForm: ManualForm = {
@@ -67,6 +68,7 @@ const emptyForm: ManualForm = {
   mainPosition2: "",
   subPosition: "",
   subPosition2: "",
+  pityScore: 0,
 };
 
 const EMPTY_PLAYERS: Player[] = [];
@@ -81,6 +83,7 @@ function formFromPlayer(player: Player): ManualForm {
     mainPosition2: (player.mainPosition2 || "") as Position | "",
     subPosition: (player.subPosition || "") as Position | "",
     subPosition2: (player.subPosition2 || "") as Position | "",
+    pityScore: player.pityScore ?? 0,
   };
 }
 
@@ -126,6 +129,9 @@ export default function ManualPlayerDbSection({
           break;
         case "subPosition":
           diff = getPositionSortValue(a.subPosition) - getPositionSortValue(b.subPosition);
+          break;
+        case "pity":
+          diff = (a.pityScore ?? 0) - (b.pityScore ?? 0);
           break;
       }
       return sortDirection === "desc" ? -diff : diff;
@@ -267,6 +273,16 @@ export default function ManualPlayerDbSection({
               ].map(([key, label]) => (
                 <div key={key}><Label>{label}</Label><select className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form[key as keyof ManualForm] || ""} onChange={(event) => updateField(key as keyof ManualForm, event.target.value as never)}><option value="">없음</option>{positions.map((position) => <option key={position.value} value={position.value}>{position.label} ({position.value})</option>)}</select></div>
               ))}
+              <div>
+                <Label title="주라인1 우선배정 가산점 (35점 이상 시 다음 밸런싱에서 우선배정)">가산점</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.pityScore}
+                  onChange={(event) => updateField("pityScore", (parseInt(event.target.value, 10) || 0) as never)}
+                  data-testid="input-pity-score"
+                />
+              </div>
             </div>
             <Button className="mt-4 w-full" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
               <Save className="h-4 w-4 mr-2" /> {saveMutation.isPending ? "저장 중..." : editingId ? "수정 저장" : "DB에 바로 추가"}
@@ -336,7 +352,17 @@ export default function ManualPlayerDbSection({
                           부포지션 {renderSortIcon("subPosition")}
                         </button>
                       </th>
-                      <th className="px-3 py-2" title="주라인1 우선배정 가산점 (50점 이상 시 다음 밸런싱에서 우선배정)">가산점</th>
+                      <th className="px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleSort("pity")}
+                          className="flex items-center gap-1 hover:text-foreground transition-colors"
+                          title="주라인1 우선배정 가산점 (35점 이상 시 다음 밸런싱에서 우선배정)"
+                          data-testid="button-sort-pity"
+                        >
+                          가산점 {renderSortIcon("pity")}
+                        </button>
+                      </th>
                       <th className="px-3 py-2">관리</th>
                     </tr>
                   </thead>
@@ -354,14 +380,14 @@ export default function ManualPlayerDbSection({
                           {(player.pityScore ?? 0) > 0 ? (
                             <span
                               className={`text-xs font-mono px-1.5 py-0.5 rounded-full border ${
-                                (player.pityScore ?? 0) >= 50
+                                (player.pityScore ?? 0) >= 35
                                   ? "bg-amber-500/20 text-amber-400 border-amber-500/40 font-semibold"
                                   : "bg-muted text-muted-foreground border-border"
                               }`}
-                              title="주라인1 우선배정 가산점 (50점 이상 시 다음 밸런싱에서 우선배정)"
+                              title="주라인1 우선배정 가산점 (35점 이상 시 다음 밸런싱에서 우선배정)"
                               data-testid={`text-pity-${player.id}`}
                             >
-                              {(player.pityScore ?? 0) >= 50 ? "🎯 " : ""}{player.pityScore}
+                              {(player.pityScore ?? 0) >= 35 ? "🎯 " : ""}{player.pityScore}
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground font-mono">0</span>

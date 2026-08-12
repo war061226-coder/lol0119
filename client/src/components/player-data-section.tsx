@@ -74,7 +74,8 @@ export default function PlayerDataSection({
       subPosition: player.subPosition,
       subPosition2: player.subPosition2,
       manualTier: player.manualTier,
-      manualRank: player.manualRank
+      manualRank: player.manualRank,
+      pityScore: player.pityScore
     });
   };
 
@@ -195,6 +196,9 @@ export default function PlayerDataSection({
       case 'level':
         diff = (b.level || 0) - (a.level || 0);
         break;
+      case 'pity':
+        diff = (b.pityScore ?? 0) - (a.pityScore ?? 0);
+        break;
       default:
         diff = 0;
     }
@@ -236,6 +240,7 @@ export default function PlayerDataSection({
                   <SelectItem value="mmr">MMR순</SelectItem>
                   <SelectItem value="winrate">승율순</SelectItem>
                   <SelectItem value="level">레벨순</SelectItem>
+                  <SelectItem value="pity">가산점순</SelectItem>
                   <SelectItem value="name">이름순</SelectItem>
                 </SelectContent>
               </Select>
@@ -294,17 +299,17 @@ export default function PlayerDataSection({
                     <div className="flex-1">
                       <h3 className="font-semibold text-sm mb-1 flex items-center gap-1.5" data-testid={`text-summoner-name-${player.id}`}>
                         {player.summonerName}
-                        {(player.pityScore ?? 0) > 0 && (
+                        {!isEditing && (player.pityScore ?? 0) > 0 && (
                           <span
                             className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0 ${
-                              (player.pityScore ?? 0) >= 50
+                              (player.pityScore ?? 0) >= 35
                                 ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
                                 : "bg-muted text-muted-foreground border-border"
                             }`}
-                            title="주라인1 우선배정 가산점 (50점 이상이면 다음 밸런싱에서 주라인1로 우선배정)"
+                            title="주라인1 우선배정 가산점 (35점 이상이면 다음 밸런싱에서 주라인1로 우선배정)"
                             data-testid={`badge-pity-${player.id}`}
                           >
-                            {(player.pityScore ?? 0) >= 50 ? "🎯 " : ""}가산점 {player.pityScore ?? 0}
+                            {(player.pityScore ?? 0) >= 35 ? "🎯 " : ""}가산점 {player.pityScore ?? 0}
                           </span>
                         )}
                       </h3>
@@ -455,6 +460,25 @@ export default function PlayerDataSection({
                       </div>
                     )}
                     
+                    {/* 가산점 */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground" title="주라인1 우선배정 가산점 (35점 이상이면 다음 밸런싱에서 주라인1로 우선배정)">가산점</span>
+                      {isEditing ? (
+                        <Input
+                          type="number"
+                          min={0}
+                          value={editData.pityScore ?? 0}
+                          onChange={(e) => setEditData(prev => ({ ...prev, pityScore: parseInt(e.target.value, 10) || 0 }))}
+                          className="w-16 h-6 text-xs p-1 text-right"
+                          data-testid={`input-pity-${player.id}`}
+                        />
+                      ) : (
+                        <span className="text-xs font-mono" data-testid={`text-pity-inline-${player.id}`}>
+                          {player.pityScore ?? 0}
+                        </span>
+                      )}
+                    </div>
+
                     {/* LP */}
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">LP</span>

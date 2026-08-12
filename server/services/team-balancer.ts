@@ -88,9 +88,9 @@ export class TeamBalancer {
   // 주라인1 우선배정 천장(pity) 시스템
   // ---------------------------------------------------------------------
   // 주라인2 배정 +5, 부라인1 배정 +10, 부라인2 배정 +20, 부라인3 배정 +30점씩 누적되고,
-  // 누적 점수가 PITY_THRESHOLD(50점) 이상이면 다음 밸런싱에서 주라인1로 우선배정됩니다.
+  // 누적 점수가 PITY_THRESHOLD(35점) 이상이면 다음 밸런싱에서 주라인1로 우선배정됩니다.
   // 주라인1로 배정되는 순간(우선배정이든 자연배정이든) 점수는 0으로 초기화됩니다.
-  static readonly PITY_THRESHOLD = 50;
+  static readonly PITY_THRESHOLD = 35;
   static readonly PITY_POINTS = {
     PRIMARY_2: 5,
     SECONDARY_1: 10,
