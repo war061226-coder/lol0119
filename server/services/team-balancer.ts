@@ -90,6 +90,7 @@ export class TeamBalancer {
   // 주라인2 배정 +5, 부라인1 배정 +10, 부라인2 배정 +20, 부라인3 배정 +30점씩 누적되고,
   // 누적 점수가 PITY_THRESHOLD(35점) 이상이면 다음 밸런싱에서 주라인1로 우선배정됩니다.
   // 주라인1로 배정되는 순간(우선배정이든 자연배정이든) 점수는 0으로 초기화됩니다.
+  // 단, 부라인1·부라인2(3·4지망)를 둘 다 등록하지 않은 선수는 부라인3(+30) 가산점을 받지 않습니다.
   static readonly PITY_THRESHOLD = 35;
   static readonly PITY_POINTS = {
     PRIMARY_2: 5,
@@ -102,6 +103,9 @@ export class TeamBalancer {
    * 이번 판에서 player가 assignedPosition으로 배정되었을 때, 다음 판을 위한
    * pityScore를 계산합니다. 주라인1로 배정되면 무조건 0으로 초기화되고,
    * 그 외에는 배정된 라인의 선호 순위에 따라 점수가 가산됩니다.
+   * 단, 부라인1·부라인2(3·4지망)를 둘 다 설정하지 않은 선수는 주1/주2 밖으로
+   * 배정되더라도 가산점을 받지 않습니다(등록하지 않은 선호도를 기준으로 불이익/이익을
+   * 판단할 수 없기 때문).
    */
   static computeNextPityScore(player: Player, assignedPosition: Position): number {
     const currentScore = player.pityScore ?? 0;
@@ -109,6 +113,8 @@ export class TeamBalancer {
     if (player.mainPosition2 === assignedPosition) return currentScore + TeamBalancer.PITY_POINTS.PRIMARY_2;
     if (player.subPosition === assignedPosition) return currentScore + TeamBalancer.PITY_POINTS.SECONDARY_1;
     if (player.subPosition2 === assignedPosition) return currentScore + TeamBalancer.PITY_POINTS.SECONDARY_2;
+    // 3·4지망을 둘 다 설정하지 않았다면 이 이상 가산점을 부여하지 않습니다.
+    if (!player.subPosition && !player.subPosition2) return currentScore;
     return currentScore + TeamBalancer.PITY_POINTS.SECONDARY_3;
   }
 

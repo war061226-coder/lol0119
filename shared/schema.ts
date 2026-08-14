@@ -86,6 +86,9 @@ export const balanceResults = pgTable("balance_results", {
   winRateDifference: real("win_rate_difference").notNull().default(0),
   positionBalance: real("position_balance").notNull().default(0),
   winner: text("winner"),
+  // 이 밸런싱 기록의 승패가 기록되어(winner가 BLUE/RED로 설정되어) 가산점(pity)이
+  // 이미 각 선수에게 반영되었는지 여부. 같은 기록에 대해 가산점이 중복 반영되는 것을 막습니다.
+  pityApplied: boolean("pity_applied").notNull().default(false),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

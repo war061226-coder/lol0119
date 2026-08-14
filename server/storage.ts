@@ -37,6 +37,7 @@ export interface IStorage {
   getBalanceResults(limit?: number): Promise<BalanceResult[]>;
   getAllBalanceResults(): Promise<BalanceResult[]>;
   updateBalanceResultWinner(id: string, winner: string | null): Promise<BalanceResult | undefined>;
+  markBalanceResultPityApplied(id: string): Promise<BalanceResult | undefined>;
   clearBalanceResults(): Promise<void>;
   
   // Preset operations
@@ -170,6 +171,7 @@ export class MemStorage implements IStorage {
         this.balanceResults.set(result.id, {
           ...result,
           winner: result.winner ?? null,
+          pityApplied: result.pityApplied ?? false,
         });
       }
     } catch (error) {
@@ -223,6 +225,7 @@ export class MemStorage implements IStorage {
       winRateDifference: insertResult.winRateDifference || 0,
       positionBalance: insertResult.positionBalance || 0,
       winner: insertResult.winner ?? null,
+      pityApplied: insertResult.pityApplied ?? false,
       id, 
       createdAt: new Date().toISOString() 
     };
@@ -254,6 +257,19 @@ export class MemStorage implements IStorage {
     const updatedResult: BalanceResult = {
       ...existingResult,
       winner,
+    };
+    this.balanceResults.set(id, updatedResult);
+    this.persistBalanceResults();
+    return updatedResult;
+  }
+
+  async markBalanceResultPityApplied(id: string): Promise<BalanceResult | undefined> {
+    const existingResult = this.balanceResults.get(id);
+    if (!existingResult) return undefined;
+
+    const updatedResult: BalanceResult = {
+      ...existingResult,
+      pityApplied: true,
     };
     this.balanceResults.set(id, updatedResult);
     this.persistBalanceResults();
@@ -530,6 +546,15 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await this.db
       .update(balanceResults)
       .set({ winner })
+      .where(eq(balanceResults.id, id))
+      .returning();
+    return updated;
+  }
+
+  async markBalanceResultPityApplied(id: string): Promise<BalanceResult | undefined> {
+    const [updated] = await this.db
+      .update(balanceResults)
+      .set({ pityApplied: true })
       .where(eq(balanceResults.id, id))
       .returning();
     return updated;

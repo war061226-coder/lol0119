@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { opggService, apiSettings } from "./services/opgg-api";
 import { createDefaultTeamBalancer, TeamBalancer } from "./services/team-balancer";
-import { insertPlayerSchema, insertPresetSchema, insertBalanceSettingsSchema, riotIdSchema, QUICK_PLAYER_ROSTER } from "@shared/schema";
+import { insertPlayerSchema, insertPresetSchema, insertBalanceSettingsSchema, riotIdSchema, QUICK_PLAYER_ROSTER, type Position } from "@shared/schema";
 import { z } from "zod";
 import { changeAdminCredentials, getAdminUsername, requireAdmin, verifyAdminCredentials } from "./auth";
 
@@ -475,22 +475,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         positionBalance: balanceResult.positionMatch,
       });
 
-      // 주라인1 우선배정 천장(pity) 시스템: 이번에 실제로 배정된 라인을 기준으로
-      // 각 선수의 누적 점수를 갱신합니다. (주라인1 배정 시 0으로 초기화,
-      // 그 외에는 주라인2 +5 / 부라인1 +10 / 부라인2 +20 / 부라인3 +30)
-      const assignedTeamPlayers = [...balanceResult.blueTeam.players, ...balanceResult.redTeam.players];
-      await Promise.all(
-        assignedTeamPlayers.map((assignedPlayer) => {
-          const originalPlayer = players.find((player) => player.id === assignedPlayer.id);
-          if (!originalPlayer || !assignedPlayer.recommendedPosition) return Promise.resolve(undefined);
-          const nextPityScore = TeamBalancer.computeNextPityScore(
-            originalPlayer,
-            assignedPlayer.recommendedPosition,
-          );
-          if (nextPityScore === (originalPlayer.pityScore ?? 0)) return Promise.resolve(undefined);
-          return storage.updatePlayer(originalPlayer.id, { pityScore: nextPityScore });
-        }),
-      );
+      // 주라인1 우선배정 천장(pity) 가산점은 팀을 짤 때가 아니라, 실제로 경기
+      // 승패가 기록될 때(POST /api/balance-history/:id/winner) 반영됩니다.
 
       // Return the balance result with the ID for sharing
       res.json({
@@ -553,9 +539,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "승리 팀은 BLUE, RED 또는 null이어야 합니다." });
       }
 
+      const existingResult = await storage.getBalanceResult(id);
+      if (!existingResult) {
+        return res.status(404).json({ message: "밸런싱 기록을 찾을 수 없습니다." });
+      }
+
       const updatedResult = await storage.updateBalanceResultWinner(id, winner);
       if (!updatedResult) {
         return res.status(404).json({ message: "밸런싱 기록을 찾을 수 없습니다." });
+      }
+
+      // 주라인1 우선배정 천장(pity) 가산점: 승패가 실제로 기록될 때(winner가
+      // BLUE 또는 RED로 설정될 때) 그 경기에서 배정된 라인을 기준으로 반영합니다.
+      // 같은 기록에 대해 중복으로 반영되지 않도록 pityApplied 플래그로 한 번만 적용합니다.
+      if ((winner === "BLUE" || winner === "RED") && !existingResult.pityApplied) {
+        const VALID_POSITIONS: readonly Position[] = ["TOP", "JG", "MID", "ADC", "SUP"];
+        const getTeamAssignments = (team: unknown): Array<{ id: string; recommendedPosition: Position | null }> => {
+          if (!team || typeof team !== "object" || !("players" in team)) return [];
+          const teamPlayers = (team as { players?: unknown }).players;
+          if (!Array.isArray(teamPlayers)) return [];
+          return teamPlayers
+            .map((player) => {
+              if (!player || typeof player !== "object" || !("id" in player)) return null;
+              const playerId = (player as { id?: unknown }).id;
+              if (typeof playerId !== "string") return null;
+              const recommendedPosition = (player as { recommendedPosition?: unknown }).recommendedPosition;
+              const validatedPosition =
+                typeof recommendedPosition === "string" && VALID_POSITIONS.includes(recommendedPosition as Position)
+                  ? (recommendedPosition as Position)
+                  : null;
+              return { id: playerId, recommendedPosition: validatedPosition };
+            })
+            .filter((entry): entry is { id: string; recommendedPosition: Position | null } => Boolean(entry));
+        };
+
+        const assignedTeamPlayers = [
+          ...getTeamAssignments(updatedResult.blueTeam),
+          ...getTeamAssignments(updatedResult.redTeam),
+        ];
+
+        await Promise.all(
+          assignedTeamPlayers.map(async (assignedPlayer) => {
+            if (!assignedPlayer.recommendedPosition) return;
+            const originalPlayer = await storage.getPlayer(assignedPlayer.id);
+            if (!originalPlayer) return;
+            const nextPityScore = TeamBalancer.computeNextPityScore(
+              originalPlayer,
+              assignedPlayer.recommendedPosition,
+            );
+            if (nextPityScore === (originalPlayer.pityScore ?? 0)) return;
+            await storage.updatePlayer(originalPlayer.id, { pityScore: nextPityScore });
+          }),
+        );
+
+        await storage.markBalanceResultPityApplied(id);
       }
 
       res.json({
