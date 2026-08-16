@@ -448,31 +448,90 @@ export class TeamBalancer {
     return { blueTeam, redTeam };
   }
 
-  private analyzeTeamBalance(blueTeam: Player[], redTeam: Player[]): BalanceAnalysis {
-    const blueComposition = this.calculateTeamComposition(blueTeam);
-    const redComposition = this.calculateTeamComposition(redTeam);
-    
+  private calculateTeamComposition(team: Player[]): TeamComposition {
+    const recommendedPlayers = this.assignRecommendedPositions(team);
+    return this.buildTeamComposition(recommendedPlayers);
+  }
+
+  /**
+   * recommendedPlayers는 이미 각자의 recommendedPosition과, 그 라인 배정에 따라
+   * 선호도 배율(100/95/90/85/80%)까지 반영된 mmr을 갖고 있다는 전제 하에
+   * averageMmr / averageWinRate / teamScore를 계산합니다.
+   * (자동 배정, 수동 배정 모두 이 계산 로직을 공유합니다.)
+   */
+  private buildTeamComposition(recommendedPlayers: RecommendedPlayer[]): TeamComposition {
+    const totalMmr = recommendedPlayers.reduce((sum, player) => sum + player.mmr, 0);
+    const totalWinRate = recommendedPlayers.reduce((sum, player) => sum + this.getEffectiveWinRate(player), 0);
+    const averageMmr = totalMmr / recommendedPlayers.length;
+    const averageWinRate = totalWinRate / recommendedPlayers.length;
+
+    // Calculate team score based on weighted MMR
+    const teamScore = recommendedPlayers.reduce((sum, player) => {
+      const positionWeight = this.POSITION_WEIGHTS[(player.recommendedPosition || player.mainPosition) as Position] || 1.0;
+      return sum + (player.mmr * positionWeight);
+    }, 0) / recommendedPlayers.length;
+
+    return {
+      players: recommendedPlayers,
+      averageMmr: Math.round(averageMmr),
+      averageWinRate: Math.round(averageWinRate * 10000) / 100,
+      teamScore: Math.round(teamScore),
+    };
+  }
+
+  /**
+   * 수동으로 지정한 라인 배정을 그대로 사용해서(자동 탐색 없이) 팀 구성 정보를
+   * 계산합니다. 라인 선호도 배율(주1 100%/주2 95%/부1 90%/부2 85%/부3 80%)과
+   * 라인 가중치(topWeight 등)는 자동 배정과 완전히 동일하게 적용됩니다.
+   */
+  private buildManualTeamComposition(assignments: Array<{ player: Player; position: Position }>): TeamComposition {
+    const recommendedPlayers: RecommendedPlayer[] = assignments.map(({ player, position }) => ({
+      ...player,
+      mmr: Math.round(this.getWeightedMmrForPosition(player, position)),
+      recommendedPosition: position,
+    }));
+    return this.buildTeamComposition(recommendedPlayers);
+  }
+
+  /**
+   * 수동으로 짠 두 팀(블루/레드, 각 5명 + 라인 배정)을 자동 밸런싱과 동일한 방식으로
+   * 분석합니다(MMR/승률/팀 점수/밸런스 점수/포지션 매치 모두 동일한 공식 사용).
+   */
+  analyzeManualTeams(
+    blueAssignments: Array<{ player: Player; position: Position }>,
+    redAssignments: Array<{ player: Player; position: Position }>,
+    recordedWinRates?: Map<string, number>,
+  ): BalanceAnalysis {
+    this.recordedWinRates = recordedWinRates ?? new Map<string, number>();
+
+    const blueComposition = this.buildManualTeamComposition(blueAssignments);
+    const redComposition = this.buildManualTeamComposition(redAssignments);
+
+    return this.buildBalanceAnalysis(blueComposition, redComposition);
+  }
+
+  private buildBalanceAnalysis(blueComposition: TeamComposition, redComposition: TeamComposition): BalanceAnalysis {
     // Compare the same position-weighted team power that is shown in each
     // team's summary. Comparing plain averages here made the analysis say
     // "0 difference" even when weighted team scores were different.
     const mmrDifference = Math.abs(blueComposition.teamScore - redComposition.teamScore);
     const winRateDifference = Math.abs(blueComposition.averageWinRate - redComposition.averageWinRate);
-    
+
     const positionMatch = this.calculatePositionBalance(blueComposition.players, redComposition.players);
-    
+
     // Calculate overall balance score (0-100) using configurable tolerances and weights
-    const mmrScore = Math.max(0, 100 - (mmrDifference / this.settings.mmrTolerance) * 100); 
+    const mmrScore = Math.max(0, 100 - (mmrDifference / this.settings.mmrTolerance) * 100);
     const positionScore = positionMatch * 100;
     const winRateScore = Math.max(0, 100 - (winRateDifference * 2));
     const mmrWeight = this.settings.mmrWeight;
     const positionWeight = this.settings.positionWeight;
     const winRateWeight = this.settings.winRateWeight;
-    
+
     const totalWeight = mmrWeight + positionWeight + winRateWeight;
     const balanceScore = totalWeight > 0
       ? (mmrScore * mmrWeight + positionScore * positionWeight + winRateScore * winRateWeight) / totalWeight
       : 0;
-    
+
     return {
       blueTeam: blueComposition,
       redTeam: redComposition,
@@ -483,27 +542,10 @@ export class TeamBalancer {
     };
   }
 
-  private calculateTeamComposition(team: Player[]): TeamComposition {
-    const recommendedPlayers = this.assignRecommendedPositions(team);
-    // recommendedPlayers[].mmr은 이미 주/부라인 선호도 배율(100/95/90/85%)이
-    // 반영된 값이므로, 그대로 합산해서 평균/팀 점수를 계산합니다.
-    const totalMmr = recommendedPlayers.reduce((sum, player) => sum + player.mmr, 0);
-    const totalWinRate = recommendedPlayers.reduce((sum, player) => sum + this.getEffectiveWinRate(player), 0);
-    const averageMmr = totalMmr / recommendedPlayers.length;
-    const averageWinRate = totalWinRate / recommendedPlayers.length;
-    
-    // Calculate team score based on weighted MMR
-    const teamScore = recommendedPlayers.reduce((sum, player) => {
-      const positionWeight = this.POSITION_WEIGHTS[(player.recommendedPosition || player.mainPosition) as Position] || 1.0;
-      return sum + (player.mmr * positionWeight);
-    }, 0) / recommendedPlayers.length;
-    
-    return {
-      players: recommendedPlayers,
-      averageMmr: Math.round(averageMmr),
-      averageWinRate: Math.round(averageWinRate * 10000) / 100,
-      teamScore: Math.round(teamScore),
-    };
+  private analyzeTeamBalance(blueTeam: Player[], redTeam: Player[]): BalanceAnalysis {
+    const blueComposition = this.calculateTeamComposition(blueTeam);
+    const redComposition = this.calculateTeamComposition(redTeam);
+    return this.buildBalanceAnalysis(blueComposition, redComposition);
   }
 
   /**

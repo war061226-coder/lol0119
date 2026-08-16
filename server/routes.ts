@@ -8,6 +8,45 @@ import { z } from "zod";
 import { changeAdminCredentials, getAdminUsername, requireAdmin, verifyAdminCredentials } from "./auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // 최근 기록된 밸런싱 결과들을 바탕으로 각 플레이어의 실제 내전 승률을 계산합니다.
+  // 자동 밸런싱과 수동 팀 구성 모두 이 승률을 평균 승률/밸런스 점수 계산에 사용합니다.
+  const buildRecordedWinRates = async (): Promise<Map<string, number>> => {
+    const historicalWinRateByPlayer = new Map<string, { games: number; wins: number }>();
+    const getHistoryPlayerIds = (team: unknown): string[] => {
+      if (!team || typeof team !== "object" || !("players" in team)) return [];
+      const teamPlayers = (team as { players?: unknown }).players;
+      if (!Array.isArray(teamPlayers)) return [];
+      return teamPlayers
+        .map((player) => {
+          if (!player || typeof player !== "object" || !("id" in player)) return null;
+          const id = (player as { id?: unknown }).id;
+          return typeof id === "string" ? id : null;
+        })
+        .filter((id): id is string => Boolean(id));
+    };
+
+    for (const result of await storage.getAllBalanceResults()) {
+      if (result.winner !== "BLUE" && result.winner !== "RED") continue;
+      const bluePlayerIds = getHistoryPlayerIds(result.blueTeam);
+      const redPlayerIds = getHistoryPlayerIds(result.redTeam);
+      const winningPlayerIds = result.winner === "BLUE" ? bluePlayerIds : redPlayerIds;
+      const allPlayerIds = [...bluePlayerIds, ...redPlayerIds];
+      for (const playerId of allPlayerIds) {
+        const stat = historicalWinRateByPlayer.get(playerId) ?? { games: 0, wins: 0 };
+        stat.games += 1;
+        if (winningPlayerIds.includes(playerId)) stat.wins += 1;
+        historicalWinRateByPlayer.set(playerId, stat);
+      }
+    }
+
+    return new Map(
+      Array.from(historicalWinRateByPlayer.entries()).map(([playerId, stat]) => [
+        playerId,
+        stat.games > 0 ? stat.wins / stat.games : 0.5,
+      ]),
+    );
+  };
+
 
   // ── 인증 ─────────────────────────────────────────────
   // 로그인/로그아웃/내 정보 조회는 누구나 접근 가능해야 하므로
@@ -423,40 +462,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         balanceSettings = await storage.getDefaultBalanceSettings();
       }
 
-      const historicalWinRateByPlayer = new Map<string, { games: number; wins: number }>();
-      const getHistoryPlayerIds = (team: unknown): string[] => {
-        if (!team || typeof team !== "object" || !("players" in team)) return [];
-        const teamPlayers = (team as { players?: unknown }).players;
-        if (!Array.isArray(teamPlayers)) return [];
-        return teamPlayers
-          .map((player) => {
-            if (!player || typeof player !== "object" || !("id" in player)) return null;
-            const id = (player as { id?: unknown }).id;
-            return typeof id === "string" ? id : null;
-          })
-          .filter((id): id is string => Boolean(id));
-      };
-
-      for (const result of await storage.getAllBalanceResults()) {
-        if (result.winner !== "BLUE" && result.winner !== "RED") continue;
-        const bluePlayerIds = getHistoryPlayerIds(result.blueTeam);
-        const redPlayerIds = getHistoryPlayerIds(result.redTeam);
-        const winningPlayerIds = result.winner === "BLUE" ? bluePlayerIds : redPlayerIds;
-        const allPlayerIds = [...bluePlayerIds, ...redPlayerIds];
-        for (const playerId of allPlayerIds) {
-          const stat = historicalWinRateByPlayer.get(playerId) ?? { games: 0, wins: 0 };
-          stat.games += 1;
-          if (winningPlayerIds.includes(playerId)) stat.wins += 1;
-          historicalWinRateByPlayer.set(playerId, stat);
-        }
-      }
-
-      const recordedWinRates = new Map(
-        Array.from(historicalWinRateByPlayer.entries()).map(([playerId, stat]) => [
-          playerId,
-          stat.games > 0 ? stat.wins / stat.games : 0.5,
-        ]),
-      );
+      const recordedWinRates = await buildRecordedWinRates();
       
       const teamBalancerInstance = new TeamBalancer(balanceSettings);
       const balanceResult = await teamBalancerInstance.balanceTeams(players, balanceSettings, {
@@ -488,6 +494,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error balancing teams:", error);
       res.status(500).json({ message: error instanceof Error ? error.message : "팀 밸런스를 맞추는 중 오류가 발생했습니다." });
+    }
+  });
+
+  // 수동으로 지정한 팀 구성(블루/레드 각 5명 + 라인 배정)의 MMR/팀 점수/밸런스 점수를
+  // 자동 밸런싱과 완전히 동일한 공식으로 계산합니다.
+  app.post("/api/teams/manual-balance", async (req, res) => {
+    try {
+      const { blueTeam, redTeam, balanceSettingsId } = req.body;
+      const VALID_POSITIONS: Position[] = ["TOP", "JG", "MID", "ADC", "SUP"];
+
+      const parseTeamAssignments = (
+        team: unknown,
+      ): { assignments: Array<{ playerId: string; position: Position }> } | { error: string } => {
+        if (!Array.isArray(team) || team.length !== 5) {
+          return { error: "각 팀은 정확히 5명(라인 포함)이어야 합니다." };
+        }
+        const assignments: Array<{ playerId: string; position: Position }> = [];
+        for (const entry of team) {
+          if (!entry || typeof entry !== "object") return { error: "잘못된 팀 구성 데이터입니다." };
+          const playerId = (entry as { playerId?: unknown }).playerId;
+          const position = (entry as { position?: unknown }).position;
+          if (typeof playerId !== "string" || !playerId) return { error: "잘못된 플레이어 ID입니다." };
+          if (typeof position !== "string" || !VALID_POSITIONS.includes(position as Position)) {
+            return { error: `잘못된 라인입니다: ${String(position)}` };
+          }
+          assignments.push({ playerId, position: position as Position });
+        }
+        const positionSet = new Set(assignments.map((entry) => entry.position));
+        if (positionSet.size !== 5) {
+          return { error: "한 팀 안에서 TOP/JG/MID/ADC/SUP 라인이 각각 한 번씩 배정되어야 합니다." };
+        }
+        return { assignments };
+      };
+
+      const blueParsed = parseTeamAssignments(blueTeam);
+      if ("error" in blueParsed) return res.status(400).json({ message: `블루팀: ${blueParsed.error}` });
+      const redParsed = parseTeamAssignments(redTeam);
+      if ("error" in redParsed) return res.status(400).json({ message: `레드팀: ${redParsed.error}` });
+
+      const allAssignments = [...blueParsed.assignments, ...redParsed.assignments];
+      const uniquePlayerIds = new Set(allAssignments.map((entry) => entry.playerId));
+      if (uniquePlayerIds.size !== 10) {
+        return res.status(400).json({ message: "블루팀과 레드팀에 걸쳐 같은 플레이어가 중복 배정되었거나, 총 10명이 아닙니다." });
+      }
+
+      const playerById = new Map<string, Awaited<ReturnType<typeof storage.getPlayer>>>();
+      for (const playerId of Array.from(uniquePlayerIds)) {
+        const player = await storage.getPlayer(playerId);
+        if (!player) {
+          return res.status(400).json({ message: `플레이어 ID ${playerId}를 찾을 수 없습니다.` });
+        }
+        playerById.set(playerId, player);
+      }
+
+      let balanceSettings = undefined;
+      if (balanceSettingsId) {
+        balanceSettings = await storage.getBalanceSettings(balanceSettingsId);
+        if (!balanceSettings) {
+          return res.status(404).json({ message: "밸런스 설정을 찾을 수 없습니다." });
+        }
+      } else {
+        balanceSettings = await storage.getDefaultBalanceSettings();
+      }
+
+      const recordedWinRates = await buildRecordedWinRates();
+
+      const toAssignments = (parsed: { assignments: Array<{ playerId: string; position: Position }> }) =>
+        parsed.assignments.map(({ playerId, position }) => ({
+          player: playerById.get(playerId)!,
+          position,
+        }));
+
+      const teamBalancerInstance = new TeamBalancer(balanceSettings);
+      const balanceResult = teamBalancerInstance.analyzeManualTeams(
+        toAssignments(blueParsed),
+        toAssignments(redParsed),
+        recordedWinRates,
+      );
+
+      // 수동으로 짠 팀도 자동 밸런싱과 동일하게 기록에 남겨서, 승패 기록/내전 통계/
+      // 천장(pity) 가산점 시스템이 동일하게 동작하도록 합니다.
+      const savedBalanceResult = await storage.createBalanceResult({
+        blueTeam: balanceResult.blueTeam,
+        redTeam: balanceResult.redTeam,
+        balanceScore: balanceResult.balanceScore,
+        mmrDifference: balanceResult.mmrDifference,
+        winRateDifference: balanceResult.winRateDifference,
+        positionBalance: balanceResult.positionMatch,
+      });
+
+      res.json({
+        ...balanceResult,
+        id: savedBalanceResult.id,
+        createdAt: savedBalanceResult.createdAt,
+      });
+    } catch (error) {
+      console.error("Error analyzing manual teams:", error);
+      res.status(500).json({ message: error instanceof Error ? error.message : "수동 팀 구성을 계산하는 중 오류가 발생했습니다." });
     }
   });
 
@@ -770,8 +874,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (b.winRate !== a.winRate) return b.winRate - a.winRate;
           return (a.discordName || a.summonerName).localeCompare(b.discordName || b.summonerName, "ko");
         });
+      // "승률 TOP 3"는 전체 내전 참여 경기 수(recordedMatches)의 30% 이상을
+      // 실제로 플레이한 사람들 중에서만 뽑습니다. 몇 판 안 뛰고 승률만 높은
+      // 경우가 순위에 끼는 것을 막기 위한 최소 참여 기준입니다.
+      const topPlayersMinGames = Math.ceil(recordedMatches * 0.3);
       const topPlayers = playerStats
-        .filter((player) => player.games > 0)
+        .filter((player) => player.games > 0 && player.games >= topPlayersMinGames)
         .sort((a, b) => {
           if (b.winRate !== a.winRate) return b.winRate - a.winRate;
           if (b.games !== a.games) return b.games - a.games;
@@ -787,6 +895,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         redWins,
         players: playerStats,
         topPlayers,
+        topPlayersMinGames,
       });
     } catch (error) {
       console.error("Error getting in-house statistics:", error);

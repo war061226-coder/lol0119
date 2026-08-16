@@ -108,6 +108,7 @@ export default function InhouseStats() {
   // Keep the page compatible with an older cached response created before
   // the TOP 3 field was added.
   const topPlayers = data.topPlayers ?? [];
+  const topPlayersMinGames = data.topPlayersMinGames ?? 0;
   const togglePlayer = (playerId: string) => {
     setExpandedPlayerIds((current) => {
       const next = new Set(current);
@@ -143,13 +144,16 @@ export default function InhouseStats() {
             승률 TOP 3
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            승패가 기록된 경기에서 승률이 높은 순서입니다. 승률이 같으면 경기 수와 승리 수가 많은 플레이어가 앞섭니다.
+            총 {data.recordedMatches}경기 중 30% 이상({topPlayersMinGames}경기 이상) 참여한 플레이어 중에서
+            승률이 높은 순서입니다. 승률이 같으면 경기 수와 승리 수가 많은 플레이어가 앞섭니다.
           </p>
         </CardHeader>
         <CardContent>
           {topPlayers.length === 0 ? (
             <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
-              승률 TOP 3를 계산하려면 먼저 밸런싱 기록에 승패를 입력해주세요.
+              {data.recordedMatches === 0
+                ? "승률 TOP 3를 계산하려면 먼저 밸런싱 기록에 승패를 입력해주세요."
+                : `총 ${data.recordedMatches}경기 중 30% 이상(${topPlayersMinGames}경기 이상) 참여한 플레이어가 아직 없습니다.`}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

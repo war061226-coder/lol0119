@@ -211,6 +211,8 @@ export interface InhouseStatsSummary {
   redWins: number;
   players: InhousePlayerStats[];
   topPlayers: InhousePlayerStats[];
+  // topPlayers에 들기 위한 최소 참여 경기 수(총 내전 횟수의 30% 이상, 올림).
+  topPlayersMinGames: number;
 }
 
 // Balance settings schema

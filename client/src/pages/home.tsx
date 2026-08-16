@@ -4,6 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { type ShareableBalanceResult } from "@shared/schema";
 import ManualPlayerDbSection from "../components/manual-player-db-section";
+import ManualTeamBuilder from "../components/manual-team-builder";
 import TeamBalanceResult from "../components/team-balance-result";
 import BalanceHistory from "../components/balance-history";
 import InhouseStats from "../components/inhouse-stats";
@@ -161,6 +162,15 @@ export default function Home() {
                 >
                   {balanceTeamsMutation.isPending ? "밸런스 계산 중..." : `선택한 ${selectedPlayerIds.length}/10명으로 팀 짜기`}
                 </button>
+                <ManualTeamBuilder
+                  selectedPlayerIds={selectedPlayerIds}
+                  balanceSettingsId={selectedBalanceSettingsId}
+                  onResult={(data) => {
+                    setBalanceResult(data);
+                    queryClient.invalidateQueries({ queryKey: ["/api/balance-history"] });
+                    queryClient.invalidateQueries({ queryKey: ["/api/inhouse-stats"] });
+                  }}
+                />
               </div>
 
               {/* Team Balance Loading */}
